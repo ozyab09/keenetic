@@ -1,4 +1,4 @@
-"""Тесты режима сбора (keenetic.collector)."""
+"""Tests for the collect mode (keenetic.collector)."""
 
 import time
 import unittest
@@ -13,7 +13,7 @@ HOST = Host(index=1, ip="10.0.0.5", mac="aa:bb:cc:dd:ee:ff", name="TV",
 
 
 def _conns():
-    """Соединения: два от нашего хоста (443 и 53) и одно от чужого."""
+    """Connections: two from our host (443 and 53) and one from another."""
     return [
         {"src": "10.0.0.5", "dst": "8.8.8.8", "sport": 50000, "dport": 443},
         {"src": "10.0.0.5", "dst": "9.9.9.9", "sport": 50001, "dport": 53},

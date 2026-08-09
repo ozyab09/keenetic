@@ -1,4 +1,4 @@
-"""Тесты хранения последнего выбора (keenetic.last_choice)."""
+"""Tests for storing the last choice (keenetic.last_choice)."""
 
 import os
 import tempfile
@@ -11,7 +11,7 @@ class TestLastChoice(unittest.TestCase):
     def setUp(self):
         self._fd, self.path = tempfile.mkstemp(suffix=".json")
         os.close(self._fd)
-        os.unlink(self.path)  # пусть файл создаёт сама функция
+        os.unlink(self.path)  # let the function create the file itself
 
     def tearDown(self):
         if os.path.exists(self.path):

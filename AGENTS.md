@@ -1,95 +1,95 @@
-# AGENTS.md — инструкции для AI-ассистентов
+# AGENTS.md — guidelines for AI assistants
 
-Этот файл содержит рекомендации для AI-ассистентов (Claude, Codebuff, Copilot и др.)  
-при работе с проектом **keenetic**.
+This file contains recommendations for AI assistants (Claude, Codebuff, Copilot, etc.)
+working on the **keenetic** project.
 
 ---
 
-## Общие правила
+## General rules
 
-### Язык
-- Код, комментарии и docstrings — **русский** (проект для русскоязычного пользователя).
-- AGENTS.md — **русский**.
-- Внешние интерфейсы (GitHub, CI) — можно на английском.
+### Language
+- Code, comments and docstrings — **English**.
+- AGENTS.md — **English**.
+- README.md and user-facing output — **English**.
 
-### Стиль кода
-- Python 3.10+ с type hints (`str | None`, `list[Host]`).
-- Dataclasses для моделей данных.
-- Только **стандартная библиотека** — никаких внешних зависимостей (`pip install`).
-- `urllib` для HTTP, `socket` для WHOIS, `hashlib` для MD5/SHA256.
-- Максимальная длина строки — ~120 символов.
+### Code style
+- Python 3.10+ with type hints (`str | None`, `list[Host]`).
+- Dataclasses for data models.
+- **Standard library only** — no external dependencies (`pip install`).
+- `urllib` for HTTP, `socket` for WHOIS, `hashlib` for MD5/SHA256.
+- Maximum line length — ~120 characters.
 
-### Импорты
-- Внутренние модули импортируем через `import keenetic.X as X` или `from keenetic.X import Y`.
-- Конфигурация: `import keenetic.config as config`, обращение через `config.XXX`.
-- **Никогда** не использовать `from keenetic.config import DEBUG` — это создаёт локальную копию, и флаг `--debug` не будет работать. Всегда писать `config.DEBUG`.
+### Imports
+- Internal modules are imported via `import keenetic.X as X` or `from keenetic.X import Y`.
+- Configuration: `import keenetic.config as config`, access via `config.XXX`.
+- **Never** use `from keenetic.config import DEBUG` — it creates a local copy and the `--debug` flag stops working. Always use `config.DEBUG`.
 
-### Структура модулей
+### Module structure
 
 ```
-keenetic/                  ← корень репозитория
-├── keenetic/              ← пакет
-│   ├── __init__.py        → экспортирует main()
+keenetic/                  ← repository root
+├── keenetic/              ← package
+│   ├── __init__.py        → exports main()
 │   ├── __main__.py        → python -m keenetic
-│   ├── cli.py             → аргументы, интерактивное меню, main()
-│   ├── config.py          → константы (ROUTER_IP, LOGIN, DEBUG, COLLECT_COUNT...)
-│   ├── models.py          → dataclasses + вспомогательные функции
-│   ├── session.py         → KeeneticSession (HTTP-клиент)
-│   ├── auth.py            → challenge-response авторизация
-│   ├── hosts.py           → получение/вывод/выбор хостов
-│   ├── connections.py     → получение/вывод активных соединений
-│   ├── collector.py       → режим сбора (5 запросов + агрегация)
-│   ├── whois.py           → WHOIS-запросы
-│   ├── static_routes.py   → сравнение подсетей + выбор группы
-│   └── last_choice.py     → последний выбор пользователя (~/.keenetic/)
-├── tests/                 → юнит-тесты (unittest, stdlib)
-├── pyproject.toml         → метаданные пакета
-├── keenetic.sh            → bash-лаунчер
-├── AGENTS.md              → этот файл
-└── README.md              → документация
+│   ├── cli.py             → arguments, interactive menu, main()
+│   ├── config.py          → constants (ROUTER_IP, LOGIN, DEBUG, COLLECT_COUNT...)
+│   ├── models.py          → dataclasses + helpers
+│   ├── session.py         → KeeneticSession (HTTP client)
+│   ├── auth.py            → challenge-response authentication
+│   ├── hosts.py           → fetching/displaying/selecting hosts
+│   ├── connections.py     → fetching/displaying active connections
+│   ├── collector.py       → collect mode (5 requests + aggregation)
+│   ├── whois.py           → WHOIS lookups
+│   ├── static_routes.py   → subnet comparison + group selection
+│   └── last_choice.py     → user's last choice (last_choice.json)
+├── tests/                 → unit tests (unittest, stdlib)
+├── pyproject.toml         → package metadata
+├── keenetic.sh            → bash launcher
+├── AGENTS.md              → this file
+└── README.md              → documentation
 ```
 
-### Отладка
-- Глобальный флаг `config.DEBUG` включает вывод сырых JSON.
-- Флаг устанавливается через `--debug` в `cli.py`: `config.DEBUG = True`.
+### Debugging
+- The global `config.DEBUG` flag enables raw JSON output.
+- The flag is set via `--debug` in `cli.py`: `config.DEBUG = True`.
 
-## Основные сценарии
+## Main scenarios
 
-### Добавление нового функционала
-1. Определить, в какой модуль логически входит функционал
-2. Создать новый модуль, если нужно (например, `dns.py` для DNS-lookup)
-3. Подключить в `cli.py`
-4. Проверить: `python -c "from keenetic.cli import main"`
+### Adding new functionality
+1. Decide which module the functionality logically belongs to
+2. Create a new module if needed (e.g. `dns.py` for DNS lookups)
+3. Wire it up in `cli.py`
+4. Check: `python -c "from keenetic.cli import main"`
 
-### Изменение конфигурации
-- Все настраиваемые параметры — в `keenetic/config.py`
-- Если параметр изменяется во время работы (например, `DEBUG`) — **только** через `import keenetic.config as config; config.XXX = val`
-- Если параметр статический — можно импортировать `from keenetic.config import XXX`
+### Changing configuration
+- All tunable parameters live in `keenetic/config.py`
+- If a parameter changes at runtime (e.g. `DEBUG`) — **only** via `import keenetic.config as config; config.XXX = val`
+- If a parameter is static, `from keenetic.config import XXX` is fine
 
-### Работа с API Keenetic
-- Эндпоинты: `/rci/show/ip/hotspot` (хосты), `/rci/show/ip/connections` и альтернативы (соединения)
-- Ответы могут быть в разных форматах: `{"address": "..."}` или просто строка
-- Для безопасного извлечения значений используется `models.str_val()`
-- NAT-записи содержат поля `x_src_ip` / `x_dst_ip` — их нужно проверять при фильтрации
-- Авторизация: challenge-response (MD5 + SHA256), описана в `keenetic/auth.py`
+### Working with the Keenetic API
+- Endpoints: `/rci/show/ip/hotspot` (hosts), `/rci/show/ip/connections` and alternatives (connections)
+- Responses may come in different formats: `{"address": "..."}` or a plain string
+- Use `models.str_val()` for safe value extraction
+- NAT records contain `x_src_ip` / `x_dst_ip` fields — check them when filtering
+- Authentication: challenge-response (MD5 + SHA256), described in `keenetic/auth.py`
 
-### Тестирование
-- Юнит-тесты: `python -m unittest discover -s tests -v` (из корня репозитория)
-- `./keenetic.sh` или `python -m keenetic` — полный цикл запуска (из корня репозитория)
-- Проверка импортов: `python -c "from keenetic.cli import main"`
-- Проверка синтаксиса: `python -c "import ast; ast.parse(open('path/to/file.py').read())"`
+### Testing
+- Unit tests: `python -m unittest discover -s tests -v` (from the repository root)
+- `./keenetic.sh` or `python -m keenetic` — full run (from the repository root)
+- Import check: `python -c "from keenetic.cli import main"`
+- Syntax check: `python -c "import ast; ast.parse(open('path/to/file.py').read())"`
 
-## Типовые задачи
+## Typical tasks
 
-### Добавить новый эндпоинт соединений
-Дополнить список `CONNECTION_ENDPOINTS` в `keenetic/connections.py`.
+### Adding a new connection endpoint
+Extend the `CONNECTION_ENDPOINTS` list in `keenetic/connections.py`.
 
-### Добавить новое поле в вывод
-- Если поле из API: добавить ключ в `_pick()` в `models.parse_connection()`
-- Если новое поле в моделях: дополнить соответствующий dataclass
-- Обновить вывод в `print_connections()` (connections.py) или `print_collected()` (collector.py)
+### Adding a new output field
+- If the field comes from the API: add a key to `_pick()` in `models.parse_connection()`
+- If it's a new model field: extend the corresponding dataclass
+- Update the output in `print_connections()` (connections.py) or `print_collected()` (collector.py)
 
-### Добавить новый источник данных (не WHOIS)
-- Создать модуль `keenetic/new_source.py` с функцией `lookup(ip) -> SomeInfo`
-- Вызвать из `print_collected()` или из нового режима в `cli.py`
-- Формат: dataclass с полями + функция `lookup(ip) -> Dataclass`, ошибка в поле `error`
+### Adding a new data source (not WHOIS)
+- Create a module `keenetic/new_source.py` with a `lookup(ip) -> SomeInfo` function
+- Call it from `print_collected()` or from a new mode in `cli.py`
+- Format: a dataclass with fields + a `lookup(ip) -> Dataclass` function, errors in the `error` field

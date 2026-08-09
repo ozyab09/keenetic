@@ -1,16 +1,17 @@
-"""Сравнение подсетей Google/YouTube с DNS-статическими маршрутами роутера.
+"""Comparing Google/YouTube subnets with the router's DNS static routes.
 
-KeeneticOS 4.x (Keenetic Giga и новее) хранит DNS-статические маршруты так:
-  - /rci/dns-proxy/route      — сами маршруты: [{group, interface, auto, ...}]
-  - /rci/object-group/fqdn    — группы доменных имён: {имя: {include: [{address}]}}
+KeeneticOS 4.x (Keenetic Giga and newer) stores DNS static routes like this:
+  - /rci/dns-proxy/route      — the routes: [{group, interface, auto, ...}]
+  - /rci/object-group/fqdn    — FQDN groups: {name: {include: [{address}]}}
 
-Подсети и домены лежат в записях include групп (поле "address"). Скрипт после
-WHOIS-обогащения (режим сбора) выбирает подсети Google/YouTube, сравнивает их
-с подсетями на роутере и выводит отсутствующие. Пользователь при старте
-скрипта выбирает группу DNS-маршрутов, в которую будут добавляться
-отсутствующие подсети (последний выбор сохраняется в last_choice.json).
+Subnets and domains live in the "include" entries of the groups (field
+"address"). After WHOIS enrichment (collect mode) the script picks
+Google/YouTube subnets, compares them with the subnets on the router and
+prints the missing ones. At startup the user selects the DNS route group
+into which missing subnets are added (the last choice is stored in
+last_choice.json).
 
-Эндпоинты найдены по ключам из бандла веб-интерфейса KeeneticOS
+Endpoints were discovered from the KeeneticOS web UI bundle keys
 ("dns-proxy.route", "object-group.fqdn").
 """
 
@@ -23,29 +24,29 @@ import keenetic.config as config
 from keenetic.session import KeeneticSession
 from keenetic.whois import WhoisInfo
 
-# Эндпоинт групп доменных имён DNS-статических маршрутов KeeneticOS 4.x
+# Endpoint of FQDN groups for DNS static routes on KeeneticOS 4.x
 OBJECT_GROUP_FQDN_ENDPOINT = "/rci/object-group/fqdn"
 
-# Ключевые слова для определения принадлежности подсети Google/YouTube
-# (ищутся в OrgName / Organization из WHOIS, без учёта регистра)
+# Keywords used to tell whether a subnet belongs to Google/YouTube
+# (searched in OrgName / Organization from WHOIS, case-insensitive)
 GOOGLE_ORG_KEYWORDS = ("google", "youtube")
 
 
 # ---------------------------------------------------------------------------
-# Получение данных с роутера
+# Fetching data from the router
 # ---------------------------------------------------------------------------
 
 def _safe_json(session: KeeneticSession, path: str) -> dict | list | None:
-    """GET-запрос с безопасным JSON-разбором (и выводом в DEBUG)."""
+    """GET request with safe JSON parsing (and DEBUG output)."""
     data, status = session.get(path)
     if status != 200:
-        print(f"[!] Ошибка получения {path}: HTTP {status}")
+        print(f"[!] Error fetching {path}: HTTP {status}")
         return None
 
     try:
         parsed = json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
-        print(f"[!] Роутер вернул не-JSON ответ на запрос {path}.")
+        print(f"[!] Router returned a non-JSON response for {path}.")
         return None
 
     if config.DEBUG:
@@ -55,7 +56,7 @@ def _safe_json(session: KeeneticSession, path: str) -> dict | list | None:
 
 
 def get_fqdn_groups_full(session: KeeneticSession) -> dict[str, dict] | None:
-    """Полные группы доменных имён: {имя: {description, include: [{address}]}}."""
+    """Full FQDN groups: {name: {description, include: [{address}]}}."""
     parsed = _safe_json(session, OBJECT_GROUP_FQDN_ENDPOINT)
     if parsed is None:
         return None
@@ -80,7 +81,7 @@ def get_fqdn_groups_full(session: KeeneticSession) -> dict[str, dict] | None:
 
 
 def get_fqdn_groups(session: KeeneticSession) -> dict[str, list[str]] | None:
-    """Группы доменных имён: {имя_группы: [подсеть/домен, ...]}."""
+    """FQDN groups: {group_name: [subnet/domain, ...]}."""
     full = get_fqdn_groups_full(session)
     if full is None:
         return None
@@ -88,31 +89,31 @@ def get_fqdn_groups(session: KeeneticSession) -> dict[str, list[str]] | None:
 
 
 def extract_subnets(addresses: list[str]) -> set[str]:
-    """Канонизирует список адресов/подсетей (и отбрасывает 0.0.0.0)."""
+    """Canonicalizes a list of addresses/subnets (and drops 0.0.0.0)."""
     subnets: set[str] = set()
     for address in addresses:
         try:
             net = ipaddress.ip_network(address, strict=False)
         except ValueError:
-            continue  # не IP — домен или мусор, не участвует в сравнении
+            continue  # not an IP — a domain or junk, not part of the comparison
         if str(net) in ("0.0.0.0/32", "0.0.0.0/0"):
-            continue  # служебное значение
+            continue  # service value
         subnets.add(str(net))
     return subnets
 
 
 def get_router_subnets(session: KeeneticSession) -> tuple[set[str], int] | None:
-    """Подсети из DNS-маршрутов роутера и число доменных записей в группах.
+    """Subnets from the router's DNS routes and the number of domain entries.
 
-    Возвращает (подсети, количество доменных записей). Домены не участвуют
-    в сравнении подсетей, но о них нужно сообщить пользователю.
+    Returns (subnets, number of domain entries). Domains don't participate
+    in the subnet comparison, but the user should be told about them.
     """
     groups = get_fqdn_groups(session)
     if groups is None:
         return None
 
     if config.DEBUG:
-        print(f"[DEBUG] Групп DNS-маршрутов: {len(groups)}")
+        print(f"[DEBUG] DNS route groups: {len(groups)}")
 
     all_addresses = [a for addresses in groups.values() for a in addresses]
     subnets = extract_subnets(all_addresses)
@@ -126,11 +127,11 @@ def get_router_subnets(session: KeeneticSession) -> tuple[set[str], int] | None:
 
 
 # ---------------------------------------------------------------------------
-# Фильтр подсетей Google/YouTube из WHOIS
+# Filtering Google/YouTube subnets from WHOIS
 # ---------------------------------------------------------------------------
 
 def google_subnets_from_whois(whois_cache: dict[str, WhoisInfo]) -> dict[str, str]:
-    """Подсети Google/YouTube из WHOIS: {cidr: организация}."""
+    """Google/YouTube subnets from WHOIS: {cidr: organization}."""
     found: dict[str, str] = {}
     for wi in whois_cache.values():
         if wi is None or wi.error or not wi.cidr:
@@ -149,14 +150,14 @@ def google_subnets_from_whois(whois_cache: dict[str, WhoisInfo]) -> dict[str, st
 
 
 # ---------------------------------------------------------------------------
-# Сравнение и вывод
+# Comparison and output
 # ---------------------------------------------------------------------------
 
 def _is_covered(cidr: str, router_subnets: set[str]) -> bool:
-    """Покрыта ли подсеть уже имеющимися на роутере маршрутами.
+    """Whether the subnet is already covered by routes on the router.
 
-    Подсеть считается покрытой, если на роутере есть та же подсеть
-    или более широкая, содержащая её целиком.
+    A subnet is considered covered if the router has the same subnet
+    or a wider one that fully contains it.
     """
     try:
         found = ipaddress.ip_network(cidr, strict=False)
@@ -174,7 +175,7 @@ def _is_covered(cidr: str, router_subnets: set[str]) -> bool:
 
 
 def _sorted_subnets(found: dict[str, str]) -> list[tuple[str, str]]:
-    """Сортирует подсети в числовом порядке (по адресу сети и префиксу)."""
+    """Sorts subnets numerically (by network address and prefix)."""
     def _key(item: tuple[str, str]):
         net = ipaddress.ip_network(item[0], strict=False)
         return int(net.network_address), net.prefixlen
@@ -185,25 +186,25 @@ def _sorted_subnets(found: dict[str, str]) -> list[tuple[str, str]]:
 def compare_google_subnets(session: KeeneticSession,
                            whois_cache: dict[str, WhoisInfo],
                            group_name: str | None = None) -> None:
-    """Сравнивает подсети Google/YouTube из WHOIS со списком DNS-маршрутов роутера.
+    """Compares Google/YouTube subnets from WHOIS with the router's DNS routes.
 
-    Выводит на экран найденные подсети и отдельно — отсутствующие на роутере.
-    Если передано имя группы (group_name) — автоматически добавляет
-    отсутствующие подсети в неё.
+    Prints the found subnets and separately the ones missing on the router.
+    If a group name (group_name) is passed, automatically adds the missing
+    subnets to that group.
     """
     found = google_subnets_from_whois(whois_cache)
     if not found:
-        print("\n[!] Среди найденных хостов нет подсетей Google/YouTube — сравнение пропущено.")
+        print("\n[!] No Google/YouTube subnets found among the hosts — comparison skipped.")
         return
 
-    print(f"\n[*] Запрашиваем DNS-статические маршруты роутера ({OBJECT_GROUP_FQDN_ENDPOINT})...")
+    print(f"\n[*] Fetching router DNS static routes ({OBJECT_GROUP_FQDN_ENDPOINT})...")
     router_result = get_router_subnets(session)
     if router_result is None:
         return
     router_subnets, domain_count = router_result
 
     if domain_count:
-        print(f"  [i] В группах маршрутов {domain_count} доменных записей — они не участвуют в сравнении подсетей.")
+        print(f"  [i] {domain_count} domain entries in route groups — they don't participate in the subnet comparison.")
 
     missing = {
         cidr: org for cidr, org in found.items()
@@ -215,54 +216,54 @@ def compare_google_subnets(session: KeeneticSession,
         if group_name:
             _add_missing_subnets(session, missing, group_name)
         else:
-            print("  [i] Автоматическое добавление пропущено (группа не выбрана).")
+            print("  [i] Auto-add skipped (no group selected).")
 
 
 # ---------------------------------------------------------------------------
-# Выбор группы для добавления и запись на роутер
+# Group selection for adding and writing to the router
 # ---------------------------------------------------------------------------
 
 def select_fqdn_group(session: KeeneticSession,
                       last_group: str | None = None) -> str | None:
-    """Интерактивный выбор группы DNS-маршрутов для автодобавления подсетей.
+    """Interactive selection of the DNS route group for auto-adding subnets.
 
-    Пользователь выбирает группу по номеру, имени или описанию.
-    Enter — последняя выбранная группа (если есть), иначе первая в списке;
-    '0' — не добавлять автоматически (возвращает None).
+    The user picks a group by number, name or description.
+    Enter — the last selected group (if any), otherwise the first in the list;
+    '0' — don't add automatically (returns None).
     """
     full_groups = get_fqdn_groups_full(session)
     if full_groups is None:
         return None
     if not full_groups:
-        print("  [!] На роутере нет групп DNS-маршрутов — автодобавление отключено.")
+        print("  [!] No DNS route groups on the router — auto-add disabled.")
         return None
 
-    # Группы с описанием — выше, остальные сортируем по имени
+    # Groups with a description come first, the rest are sorted by name
     items = sorted(
         full_groups.items(),
         key=lambda kv: (not (kv[1].get("description") or ""), kv[0].lower()),
     )
 
-    # По умолчанию: последняя группа, «не добавлять» или первая в списке
+    # Default: the last group, "don't add" or the first in the list
     default = 1
     if last_group:
         default = next((i for i, (n, _) in enumerate(items, 1) if n == last_group), 1)
     elif last_group == "":
-        default = 0  # пользователь ранее отказался от автодобавления
+        default = 0  # the user previously declined auto-add
 
     print(f"\n{'─' * 80}")
-    print("  Выберите группу DNS-маршрутов для автодобавления отсутствующих подсетей:")
+    print("  Select a DNS route group for auto-adding missing subnets:")
     for i, (name, group) in enumerate(items, 1):
         desc = group.get("description") or ""
         count = len(group.get("include") or [])
-        marker = "  ◀ последняя" if name == last_group else ""
-        print(f"    {i:<3} {name:<26} «{desc}» ({count} зап.){marker}")
-    print("    0    Не добавлять автоматически")
+        marker = "  ◀ last" if name == last_group else ""
+        print(f"    {i:<3} {name:<26} '{desc}' ({count} entries){marker}")
+    print("    0    Don't add automatically")
     print(f"{'─' * 80}")
 
     while True:
         try:
-            raw = input(f"  Группа [{default}]: ").strip()
+            raw = input(f"  Group [{default}]: ").strip()
             if raw == "":
                 return None if default == 0 else items[default - 1][0]
             if raw == "0":
@@ -274,9 +275,9 @@ def select_fqdn_group(session: KeeneticSession,
             if idx is not None:
                 if 1 <= idx <= len(items):
                     return items[idx - 1][0]
-                print(f"  [!] Номер от 1 до {len(items)} или 0")
+                print(f"  [!] Number from 1 to {len(items)} or 0")
                 continue
-            # Поиск по имени или описанию (частичное совпадение)
+            # Search by name or description (partial match)
             raw_lower = raw.lower()
             matches = [
                 n for n, g in full_groups.items()
@@ -285,18 +286,18 @@ def select_fqdn_group(session: KeeneticSession,
             if len(matches) == 1:
                 return matches[0]
             if len(matches) > 1:
-                print(f"  [!] Несколько совпадений: {', '.join(matches)}")
+                print(f"  [!] Multiple matches: {', '.join(matches)}")
             else:
-                print(f"  [!] Группа '{raw}' не найдена")
+                print(f"  [!] Group '{raw}' not found")
         except (KeyboardInterrupt, EOFError):
-            print("\nВыход.")
+            print("\nExiting.")
             sys.exit(0)
 
 
 def build_group_payload(group_name: str, description: str,
                         current_entries: list[dict],
                         new_addresses: list[str]) -> dict:
-    """Payload для записи группы: существующие записи + новые, без дублей."""
+    """Payload for writing a group: existing entries + new ones, no duplicates."""
     seen: set[str] = set()
     include: list[dict] = []
     for entry in current_entries:
@@ -314,7 +315,7 @@ def build_group_payload(group_name: str, description: str,
 
 
 def _status_has_errors(value) -> bool:
-    """Ищет 'status': 'error' в статусном дереве ответа роутера."""
+    """Looks for 'status': 'error' in the router response status tree."""
     if isinstance(value, dict):
         status = value.get("status")
         if isinstance(status, str) and status.lower() == "error":
@@ -326,60 +327,60 @@ def _status_has_errors(value) -> bool:
 
 
 def write_fqdn_group(session: KeeneticSession, payload: dict) -> bool:
-    """Записывает группу доменных имён на роутер. True — успех."""
+    """Writes an FQDN group to the router. True on success."""
     data, status = session.post_json(OBJECT_GROUP_FQDN_ENDPOINT, payload)
     if status != 200:
         return False
     try:
         parsed = json.loads(data.decode("utf-8"))
     except (ValueError, UnicodeDecodeError):
-        return True  # ответ не разобрали — полагаемся на HTTP 200
+        return True  # response not parsed — rely on HTTP 200
     return not _status_has_errors(parsed)
 
 
 def _add_missing_subnets(session: KeeneticSession, missing: dict[str, str],
                          group_name: str) -> None:
-    """Автоматически добавляет отсутствующие подсети в выбранную группу."""
+    """Automatically adds the missing subnets to the selected group."""
     full_groups = get_fqdn_groups_full(session)
     if full_groups is None:
         return
     if group_name not in full_groups:
-        print(f"  [!] Группа «{group_name}» не найдена на роутере — добавление пропущено.")
+        print(f"  [!] Group '{group_name}' not found on the router — add skipped.")
         return
 
     group = full_groups[group_name]
     payload = build_group_payload(
         group_name, group["description"], group["include"], list(missing.keys()),
     )
-    print(f"  [i] Добавляем отсутствующие подсети ({len(missing)}) в группу «{group['description']}» ({group_name})...")
+    print(f"  [i] Adding missing subnets ({len(missing)}) to group '{group['description']}' ({group_name})...")
     if not write_fqdn_group(session, payload):
-        print("  [!] Не удалось записать группу на роутер.")
+        print("  [!] Failed to write the group to the router.")
         return
 
-    print(f"  [✓] Подсети добавлены в группу {group_name} («{group['description']}»):")
+    print(f"  [✓] Subnets added to group {group_name} ('{group['description']}'):")
     for cidr in sorted(missing):
         print(f"      • {cidr}  ({missing[cidr] or '-'})")
 
 
 def _print_result(found: dict[str, str], missing: dict[str, str]) -> None:
-    """Выводит результат сравнения подсетей с DNS-маршрутами роутера."""
+    """Prints the result of comparing subnets with the router's DNS routes."""
     present = len(found) - len(missing)
 
     print(f"\n{'═' * 100}")
-    print("  🌐 Подсети Google/YouTube: сравнение с DNS-маршрутами роутера")
-    print(f"  Найдено подсетей: {len(found)}  |  Уже на роутере: {present}  |  Отсутствует: {len(missing)}")
+    print("  🌐 Google/YouTube subnets: comparison with router DNS routes")
+    print(f"  Found: {len(found)}  |  Already on router: {present}  |  Missing: {len(missing)}")
     print(f"{'═' * 100}")
 
-    print(f"\n  {'#':<4} {'Подсеть':<24} {'Организация':<32} {'Статус'}")
+    print(f"\n  {'#':<4} {'Subnet':<24} {'Organization':<32} {'Status'}")
     print(f"  {'─' * 96}")
     for i, (cidr, org) in enumerate(_sorted_subnets(found), 1):
-        status = "✗ отсутствует" if cidr in missing else "✓ есть на роутере"
+        status = "✗ missing" if cidr in missing else "✓ on router"
         print(f"  {i:<4} {cidr:<24} {(org or '-'):<32} {status}")
     print(f"  {'─' * 96}")
 
     if missing:
-        print(f"\n  ⚠️  Отсутствующие подсети ({len(missing)}) — их нет в DNS-маршрутах роутера:")
+        print(f"\n  ⚠️  Missing subnets ({len(missing)}) — not present in the router's DNS routes:")
         for cidr, org in _sorted_subnets(missing):
             print(f"    • {cidr}  ({org or '-'})")
     else:
-        print("\n  ✅ Все найденные подсети Google/YouTube уже есть на роутере.")
+        print("\n  ✅ All found Google/YouTube subnets are already on the router.")

@@ -21,14 +21,14 @@ The repo root is the project root; the Python package lives in `keenetic/keeneti
 - `session.py` — `KeeneticSession` HTTP client (urllib, cookie-aware)
 - `hosts.py` — fetch/list/select hosts from `/rci/show/ip/hotspot`
 - `connections.py` — `get_host_connections()` tries `CONNECTION_ENDPOINTS` (e.g. `/rci/show/ip/connections`, `/rci/show/ip/nat`); `print_connections()`
-- `collector.py` — collect mode: N requests every 5s, aggregate unique dst IPs + ports
+- `collector.py` — collect mode: N requests every 5s, aggregate unique dst IPs + ports; `port == 0` means "no port filter" (all ports)
 - `whois.py` — `WhoisInfo` dataclass + `lookup(ip)` over raw TCP socket to whois.arin.net:43, 8s timeout
-- `static_routes.py` — сравнение подсетей Google/YouTube из WHOIS со списком DNS-маршрутов роутера; вызывается после режима сбора. Группа для автодобавления выбирается пользователем при старте (`select_fqdn_group`, Enter — последняя, `0` — не добавлять); при наличии отсутствующих подсетей автоматически добавляет их через `POST /rci/object-group/fqdn` (без подтверждения) (payload: `{имя_группы: {description, include: [{address}]}}`, запись целиком заменяет include — при добавлении нужно сливать с текущими записями)
-- `last_choice.py` — последний выбор пользователя (хост/режим/порт/группа) в `last_choice.json` (JSON в корне репозитория, путь вычисляется от пакета `keenetic/` на уровень вверх); Enter в промптах берёт последнее значение; в выборе хоста Enter подтверждает последний хост, `quit`/`exit`/`q`/`выход` — выход (слово `last` тоже работает как Enter); группа сохраняется только в режиме `collect`, пустая строка = явный отказ от автодобавления; файл в .gitignore (личные данные)
+- `static_routes.py` — compares Google/YouTube subnets from WHOIS against the router's DNS routes; runs after collect mode. The group for auto-add is chosen by the user at startup (`select_fqdn_group`, Enter — last one, `0` — don't add); missing subnets are auto-added via `POST /rci/object-group/fqdn` (no confirmation) (payload: `{group_name: {description, include: [{address}]}}`, the write replaces include entirely — merge with current entries when adding)
+- `last_choice.py` — user's last choice (host/mode/port/group) in `last_choice.json` (JSON in the repo root, path computed one level up from the `keenetic/` package); Enter in prompts takes the last value; in host selection Enter confirms the last host, `quit`/`exit`/`q` — exit (the word `last` also works like Enter); the group is saved only in `collect` mode, an empty string = explicitly declined auto-add; the file is in .gitignore (personal data)
 
-**DNS-статические маршруты (KeeneticOS 4.x, реальные эндпоинты, найдены по JS бандлу веб-интерфейса):**
-- `/rci/object-group/fqdn` — группы доменных имён: `{имя: {description, include: [{address}]}}` — здесь лежат подсети/домены (адрес `/rci/staticRoutes/dns` на KeeneticOS 4.x НЕ существует — 404)
-- `/rci/dns-proxy/route` — сами маршруты: `[{group, interface, auto, reject, index}]` (группы ссылаются на имена из object-group)
+**DNS static routes (KeeneticOS 4.x, real endpoints, discovered from the web UI JS bundle):**
+- `/rci/object-group/fqdn` — FQDN groups: `{name: {description, include: [{address}]}}` — subnets/domains live here (the `/rci/staticRoutes/dns` path does NOT exist on KeeneticOS 4.x — 404)
+- `/rci/dns-proxy/route` — the routes: `[{group, interface, auto, reject, index}]` (groups reference names from object-group)
 - `cli.py` — interactive menu (`choose_mode_and_port()`, `main()`), sets `config.DEBUG`
 - `models.py` — dataclasses (`Host`, `Connection`, `RawConn`, `CollectedHost`) + `str_val()`, `parse_connection()`
 - Entry points: `__main__.py` (`python -m keenetic`), `pyproject.toml` script (`keenetic` after `pip install .`), `keenetic.sh` (bash launcher)
@@ -36,13 +36,13 @@ The repo root is the project root; the Python package lives in `keenetic/keeneti
 Data flow: auth → host list → user selects host → mode (collect 5×5s | snapshot) → filter by port (default 443, 0 = all) → WHOIS enrichment → tables.
 
 ## Conventions
-- **Language: Russian** — code comments, docstrings, and AGENTS.md are in Russian; project targets a Russian-speaking user
+- **Language: English** — code comments, docstrings, AGENTS.md and README.md are in English
 - Python 3.10+ type hints (`str | None`, `list[Host]`); dataclasses for models; lines ~120 chars max
 - Internal imports as `import keenetic.config as config`; access mutable config via `config.XXX`
 - **Never** `from keenetic.config import DEBUG` — it copies the value and `--debug` breaks. Always `config.DEBUG`
 - API responses vary in shape (`{"address": "..."}` or bare string) — use `models.str_val()` for safe extraction
 - NAT records have `x_src_ip`/`x_dst_ip` fields — check those when filtering
-- README.md (Russian) is the authoritative user-facing doc; AGENTS.md has AI-assistant guidelines
+- README.md is the authoritative user-facing doc; AGENTS.md has AI-assistant guidelines
 
 ## Gotchas
 - Only reachable from the router's LAN (http://192.168.1.1:80 by default, configurable via `KEENETIC_ROUTER_IP`); WHOIS needs outbound port 43

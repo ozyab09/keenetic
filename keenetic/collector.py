@@ -1,4 +1,4 @@
-"""Режим сбора: несколько запросов к API с агрегацией удалённых хостов."""
+"""Collect mode: several API requests with aggregation of remote hosts."""
 
 import time
 
@@ -13,8 +13,8 @@ from keenetic.whois import WhoisInfo, lookup as whois_lookup
 
 
 def port_label(port: int) -> str:
-    """Человекочитаемая метка порта: 0 → «все порты»."""
-    return "все порты" if port == 0 else f"порт {port}"
+    """Human-readable port label: 0 → 'all ports'."""
+    return "all ports" if port == 0 else f"port {port}"
 
 
 def fetch_and_collect(
@@ -25,17 +25,17 @@ def fetch_and_collect(
     total: int,
     port: int,
 ):
-    """Один цикл: запрос соединений → извлечение удалённых хостов → агрегация."""
-    print(f"\n  [{sample}/{total}] Запрос соединений...", end=" ", flush=True)
+    """One cycle: fetch connections → extract remote hosts → aggregate."""
+    print(f"\n  [{sample}/{total}] Requesting connections...", end=" ", flush=True)
 
     try:
         raw_list = get_all_endpoint_connections(session)
     except Exception as e:
-        print(f"[!] Ошибка: {e}")
+        print(f"[!] Error: {e}")
         return
 
     if not raw_list:
-        print("нет данных")
+        print("no data")
         return
 
     now = time.time()
@@ -50,7 +50,7 @@ def fetch_and_collect(
             continue
 
         conn = to_connection(raw, host.ip)
-        # Порт 0 означает «без фильтра по порту» (все порты)
+        # Port 0 means "no port filter" (all ports)
         if conn.src_ip == host.ip and (port == 0 or conn.dst_port == str(port)):
             dst_ip = conn.dst_ip
             if dst_ip == "-" or dst_ip == host.ip:
@@ -64,37 +64,37 @@ def fetch_and_collect(
             ch.count += 1
             ch.last_seen = now
 
-    print(f"{count_conns} соединений, всего уникальных хостов: {len(collected)}")
+    print(f"{count_conns} connections, unique hosts so far: {len(collected)}")
 
 
 def print_collected(collected: dict[str, CollectedHost], host: Host, port: int) -> dict[str, WhoisInfo]:
-    """Выводит сводку собранных удалённых хостов с WHOIS-информацией.
+    """Prints the summary of collected remote hosts with WHOIS info.
 
-    Возвращает кэш WHOIS-ответов {ip: WhoisInfo} для дальнейшего использования
-    (например, сравнения подсетей Google/YouTube с маршрутами роутера).
+    Returns the WHOIS response cache {ip: WhoisInfo} for further use
+    (e.g. comparing Google/YouTube subnets with the router's routes).
     """
     if not collected:
-        print(f"\n[!] Не обнаружено обращений ({port_label(port)}) за {config.COLLECT_COUNT} запросов.")
+        print(f"\n[!] No traffic ({port_label(port)}) over {config.COLLECT_COUNT} requests.")
         return {}
 
     sorted_hosts = sorted(collected.values(), key=lambda x: -x.count)
 
-    # ── WHOIS-запросы для каждого уникального IP ────────────────
-    print("\n[*] Запрашиваем WHOIS-информацию для найденных хостов...", flush=True)
+    # ── WHOIS lookups for each unique IP ───────────────────────
+    print("\n[*] Requesting WHOIS info for the found hosts...", flush=True)
     whois_cache: dict[str, WhoisInfo] = {}
     for i, ch in enumerate(sorted_hosts, 1):
         print(f"  [{i}/{len(sorted_hosts)}] {ch.ip}...", end=" ", flush=True)
         whois_cache[ch.ip] = whois_lookup(ch.ip)
         print("✓" if not whois_cache[ch.ip].error else f"({whois_cache[ch.ip].error})")
 
-    # ── Заголовок ───────────────────────────────────────────────
+    # ── Header ─────────────────────────────────────────────────
     total_sec = config.COLLECT_INTERVAL * (config.COLLECT_COUNT - 1)
     print(f"\n{'═' * 130}")
-    print(f"  🎯 Удалённые хосты, к которым обращался {host.ip} ({host.name})")
-    print(f"     {port_label(port)}, {config.COLLECT_COUNT} запросов с интервалом {config.fmt_interval(config.COLLECT_INTERVAL)}")
+    print(f"  🎯 Remote hosts contacted by {host.ip} ({host.name})")
+    print(f"     {port_label(port)}, {config.COLLECT_COUNT} requests every {config.fmt_interval(config.COLLECT_INTERVAL)}")
     print(f"{'═' * 130}")
 
-    print(f"\n  {'#':<4} {'IP':<16} {'Порты':<10} {'Встр':<6} {'CIDR':<24} {'Организация':<28} {'Первый':<10} {'Последний':<10}")
+    print(f"\n  {'#':<4} {'IP':<16} {'Ports':<10} {'Cnt':<6} {'CIDR':<24} {'Organization':<28} {'First':<10} {'Last':<10}")
     print(f"  {'─' * 124}")
 
     for i, ch in enumerate(sorted_hosts, 1):
@@ -107,11 +107,11 @@ def print_collected(collected: dict[str, CollectedHost], host: Host, port: int) 
         print(f"  {i:<4} {ch.ip:<16} {ports_str:<10} {ch.count:<6} {cidr:<24} {org:<28} {first:<10} {last}")
 
     print(f"  {'─' * 124}")
-    print(f"  Всего уникальных удалённых хостов: {len(collected)}")
+    print(f"  Total unique remote hosts: {len(collected)}")
 
-    # ── Детальная WHOIS-информация ──────────────────────────────
+    # ── Detailed WHOIS info ────────────────────────────────────
     print(f"\n{'═' * 130}")
-    print("  📋 Детальная WHOIS-информация")
+    print("  📋 Detailed WHOIS info")
     print(f"{'═' * 130}")
 
     for i, ch in enumerate(sorted_hosts, 1):

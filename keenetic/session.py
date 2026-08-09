@@ -1,4 +1,4 @@
-"""HTTP-сессия для Keenetic API с сохранением cookie."""
+"""HTTP session for the Keenetic API with cookie persistence."""
 
 import json
 import urllib.error
@@ -8,7 +8,7 @@ from keenetic.config import BASE_URL
 
 
 class KeeneticSession:
-    """Сессия с сохранением cookie для urllib."""
+    """Session with cookie persistence for urllib."""
 
     def __init__(self):
         self._cookie: str | None = None

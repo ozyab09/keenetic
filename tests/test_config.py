@@ -1,4 +1,4 @@
-"""Тесты конфигурации (keenetic.config)."""
+"""Tests for the configuration (keenetic.config)."""
 
 import importlib
 import os
@@ -14,8 +14,8 @@ class TestConfig(unittest.TestCase):
         self._orig = os.environ.get(ENV_KEY)
 
     def tearDown(self):
-        # Восстанавливаем окружение и перезагружаем модуль, чтобы не
-        # мутировать общее состояние для других тестов в том же процессе.
+        # Restore the environment and reload the module so we don't mutate
+        # the shared state for other tests in the same process.
         if self._orig is None:
             os.environ.pop(ENV_KEY, None)
         else:

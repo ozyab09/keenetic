@@ -1,90 +1,90 @@
 # Keenetic API Tool
 
-[![CI](https://github.com/ozyab/keenetic/actions/workflows/ci.yml/badge.svg)](https://github.com/ozyab/keenetic/actions/workflows/ci.yml)
+[![CI](https://github.com/ozyab09/keenetic/actions/workflows/ci.yml/badge.svg)](https://github.com/ozyab09/keenetic/actions/workflows/ci.yml)
 
-Утилита для мониторинга сетевых соединений через роутер Keenetic.  
-Запрашивает активные соединения выбранного хоста, собирает удалённые IP-адреса, обогащает их WHOIS-данными и сравнивает подсети Google/YouTube со списком DNS-статических маршрутов роутера.
-
----
-
-## Оглавление
-
-- [Быстрый старт](#быстрый-старт)
-- [Способы запуска](#способы-запуска)
-- [Описание работы](#описание-работы)
-- [Интерактивное меню](#интерактивное-меню)
-- [Режимы](#режимы)
-  - [Режим сбора](#1-режим-сбора)  
-  - [Режим снимка](#2-режим-снимка)
-- [WHOIS-обогащение](#whois-обогащение)
-- [Сравнение подсетей Google/YouTube](#сравнение-подсетей-googleyoutube)
-- [Запоминание последнего выбора](#запоминание-последнего-выбора)
-- [Переменные окружения](#переменные-окружения)
-- [Режим отладки](#режим-отладки)
-- [Тесты](#тесты)
-- [Непрерывная интеграция](#непрерывная-интеграция)
-- [Структура проекта](#структура-проекта)
-- [Модули (API)](#модули-api)
-- [Требования](#требования)
+A utility for monitoring network connections through a Keenetic router.  
+It fetches the active connections of a selected host, collects remote IP addresses, enriches them with WHOIS data, and compares Google/YouTube subnets against the router's DNS static routes.
 
 ---
 
-## Быстрый старт
+## Table of contents
+
+- [Quick start](#quick-start)
+- [Ways to run](#ways-to-run)
+- [How it works](#how-it-works)
+- [Interactive menu](#interactive-menu)
+- [Modes](#modes)
+  - [Collect mode](#1-collect-mode)  
+  - [Snapshot mode](#2-snapshot-mode)
+- [WHOIS enrichment](#whois-enrichment)
+- [Google/YouTube subnet comparison](#googleyoutube-subnet-comparison)
+- [Remembering the last choice](#remembering-the-last-choice)
+- [Environment variables](#environment-variables)
+- [Debug mode](#debug-mode)
+- [Tests](#tests)
+- [Continuous integration](#continuous-integration)
+- [Project structure](#project-structure)
+- [Modules (API)](#modules-api)
+- [Requirements](#requirements)
+
+---
+
+## Quick start
 
 ```bash
-# 1. Установите пароль (однократно)
-export KEENETIC_ROUTER_PASSWORD="ваш_пароль_от_keenetic"
+# 1. Set the password (once)
+export KEENETIC_ROUTER_PASSWORD="your_keenetic_password"
 
-# 2. Если роутер не на 192.168.1.1 — укажите его адрес
+# 2. If the router is not at 192.168.1.1, point to its address
 # export KEENETIC_ROUTER_IP="192.168.1.1"
 
-# 3. Запустите
+# 3. Run
 ./keenetic.sh
 ```
 
-Скрипт сам найдёт Python 3 и запустит модуль.
+The script finds Python 3 on its own and runs the module.
 
-## Способы запуска
+## Ways to run
 
-| Способ | Команда | Когда удобно |
+| Way | Command | When convenient |
 |---|---|---|
-| **Bash-лаунчер** | `./keenetic.sh` | Из корня репозитория |
-| **Python-модуль** | `python -m keenetic` | Из корня репозитория |
-| **Установка** | `pip install .` (затем `keenetic`) | После установки — из любой директории |
-| **С отладкой** | `./keenetic.sh --debug` | Для диагностики |
+| **Bash launcher** | `./keenetic.sh` | From the repository root |
+| **Python module** | `python -m keenetic` | From the repository root |
+| **Install** | `pip install .` (then `keenetic`) | After install — from anywhere |
+| **With debugging** | `./keenetic.sh --debug` | For diagnostics |
 
-Аргумент `--debug` можно передавать любому из способов.
+The `--debug` argument can be passed to any of the ways above.
 
-## Описание работы
+## How it works
 
 ```
 ┌────────────┐    ┌──────────────┐    ┌────────────┐    ┌───────────┐
-│ Авторизация│ →  │ Список хостов│ →  │ Выбор цели │ →  │ Выполнение│
-│ challenge- │    │ /rci/show/ip │    │ по IP/имени│    │ режима    │
-│ response   │    │ /hotspot     │    │ /номеру    │    │           │
-└────────────┘    └──────────────┘    └────────────┘    └───────────┘
-                                                              │
+│ Auth       │ →  │ Host list    │ →  │ Target     │ →  │ Run mode  │
+│ challenge- │    │ /rci/show/ip │    │ selection  │    │           │
+│ response   │    │ /hotspot     │    │ by IP/name │    │           │
+└────────────┘    └──────────────┘    │ /number    │    └───────────┘
+                                       └────────────┘         │
                                           ┌───────────────────┼──────────────┐
                                           ▼                   ▼              ▼
                                     ┌──────────┐        ┌──────────┐   ┌────────┐
-                                    │  Сбор    │        │  Снимок  │   │ WHOIS  │
-                                    │ 5×5 сек  │        │ 1 запрос │   │ arin   │
+                                    │ Collect  │        │ Snapshot │   │ WHOIS  │
+                                    │ 5×5 sec  │        │ 1 request│   │ arin   │
                                     └──────────┘        └──────────┘   └────────┘
 ```
 
-**Протокол авторизации:** Keenetic использует механизм **challenge-response**:
-1. `GET /auth` → роутер возвращает `X-NDM-Realm` и `X-NDM-Challenge`
-2. Клиент вычисляет `MD5(login:realm:password)` → `SHA256(challenge + md5_hash)`
-3. `POST /auth` с хэшем → получение сессионной cookie
+**Authentication protocol:** Keenetic uses **challenge-response**:
+1. `GET /auth` → the router returns `X-NDM-Realm` and `X-NDM-Challenge`
+2. The client computes `MD5(login:realm:password)` → `SHA256(challenge + md5_hash)`
+3. `POST /auth` with the hash → a session cookie is obtained
 
-**API-эндпоинты:** скрипт перебирает несколько эндпоинтов для получения соединений:
+**API endpoints:** the script iterates several endpoints to fetch connections:
 - `/rci/show/ip/connections`
-- `/rci/show/ip/conntrack` (текстовый формат, не используется)
-- `/rci/show/ip/nat` (основной рабочий эндпоинт)
+- `/rci/show/ip/conntrack` (text format, not used)
+- `/rci/show/ip/nat` (the main working endpoint)
 - `/rci/status/connection`
 - `/rci/show/ip/accounting`
 
-**Формат NAT-записей (реальный):**
+**NAT record format (real):**
 ```json
 {
   "protocol": "TCP",
@@ -100,97 +100,97 @@ export KEENETIC_ROUTER_PASSWORD="ваш_пароль_от_keenetic"
 }
 ```
 
-## Интерактивное меню
+## Interactive menu
 
-После авторизации появляется выбор хоста, затем меню:
+After authentication a host selection appears, then the menu:
 
 ```
-🔍 Выберите хост (номер / IP / имя, Enter — MyPhone (192.168.1.100), 'quit' для выхода):
+🔍 Select host (number / IP / name, Enter — MyPhone (192.168.1.100), 'quit' to exit):
 ──────────────────────────────────────────────────
-  Выберите режим:
-    1. Сбор удалённых хостов (5 запросов, интервал 5 сек)
-    2. Одноразовый снимок соединений
+  Select mode:
+    1. Collect remote hosts (5 requests, interval 5 sec)
+    2. One-shot connection snapshot
 ──────────────────────────────────────────────────
-  Режим [1]:                    ← Enter = последний выбор (или 1)
-  Порт для фильтрации [443] (0 — все порты):   ← Enter = последний порт
+  Mode [1]:                    ← Enter = last choice (or 1)
+  Filter port [443] (0 — all ports):   ← Enter = last port
 ```
 
-- **Enter** — значение по умолчанию: последний выбор пользователя (при первом запуске — режим 1, порт 443)
-- **Enter** в выборе хоста — подтвердить последний выбранный хост; **`quit`** — выход
-- **0** в порте — все порты, без фильтрации (работает и в сборе, и в снимке)
+- **Enter** — default value: the user's last choice (on first run — mode 1, port 443)
+- **Enter** in host selection — confirm the last selected host; **`quit`** — exit
+- **0** as the port — all ports, no filtering (works in both collect and snapshot)
 
-Подробнее — в разделе [Запоминание последнего выбора](#запоминание-последнего-выбора).
+See [Remembering the last choice](#remembering-the-last-choice) for details.
 
-## Режимы
+## Modes
 
-### 1. Режим сбора
+### 1. Collect mode
 
-Делает **5 запросов** к API с интервалом **5 секунд** (общее время ~20 секунд).  
-Для каждого запроса:
+Makes **5 requests** to the API every **5 seconds** (~20 seconds in total).  
+For each request:
 
-1. Получает активные соединения роутера
-2. Фильтрует по IP выбранного хоста
-3. Извлекает удалённые адреса назначения (dst_ip) на указанный порт
-4. Агрегирует: уникальный IP, список портов, количество встреч, время первого и последнего появления
+1. Fetches the router's active connections
+2. Filters by the selected host's IP
+3. Extracts remote destination addresses (dst_ip) on the given port
+4. Aggregates: unique IP, list of ports, hit count, first and last seen time
 
-После сбора — автоматический WHOIS-запрос для каждого найденного IP,  
-затем — сравнение подсетей Google/YouTube с DNS-маршрутами роутера (см. [ниже](#сравнение-подсетей-googleyoutube)).
+After collection — automatic WHOIS lookup for each found IP,  
+then — comparison of Google/YouTube subnets with the router's DNS routes (see [below](#googleyoutube-subnet-comparison)).
 
-> **Порт 0** — собрать обращения на **все** порты (без фильтрации).
+> **Port 0** — collect traffic on **all** ports (no filtering).
 
-**Пример вывода:**
+**Example output:**
 ```
-  📡 СБОР УДАЛЁННЫХ ХОСТОВ
-  Локальный хост: 192.168.1.100 (MyPhone)
-  Порт: 443  |  Запросов: 5  |  Интервал: 5 сек
-  Общая длительность: ~20 сек
+  📡 COLLECT REMOTE HOSTS
+  Local host: 192.168.1.100 (MyPhone)
+  Port: 443  |  Requests: 5  |  Interval: 5 sec
+  Total duration: ~20 sec
 
-  [1/5] Запрос соединений... 12 соединений, всего уникальных хостов: 5
-  ✅ Запрос 1 выполнен
-  ⏳ Ожидание 5 сек до запроса 2...  (текущее время: 14:35:01)
+  [1/5] Requesting connections... 12 connections, unique hosts so far: 5
+  ✅ Request 1 done
+  ⏳ Waiting 5 sec until request 2...  (current time: 14:35:01)
   ...
 ```
 
-### 2. Режим снимка
+### 2. Snapshot mode
 
-Одноразовый запрос активных соединений выбранного хоста.  
-Показывает таблицу:
+A one-shot request of the selected host's active connections.  
+Shows a table:
 
 ```
   ═══════════════════════════════════════════════════════════
-  Хост: 192.168.1.100 (MyPhone) — aa:bb:cc:dd:ee:ff
-  Фильтр: порт 443
+  Host: 192.168.1.100 (MyPhone) — aa:bb:cc:dd:ee:ff
+  Filter: port 443
   ═══════════════════════════════════════════════════════════
 
-  Протокол  Src IP               Порт        Dst IP               Порт     Состояние     RX         TX
+  Protocol  Src IP               Port        Dst IP               Port     State        RX         TX
   ────────────────────────────────────────────────────────────────────────────────────────────────────
-  tcp       192.168.1.100        54321    →  142.250.185.78       443      established   1024       2048
+  tcp       192.168.1.100        54321    →  142.250.185.78       443      established  1024       2048
 ```
 
-## WHOIS-обогащение
+## WHOIS enrichment
 
-Для каждого собранного удалённого IP скрипт выполняет запрос к `whois.arin.net:43` (raw TCP).
+For every collected remote IP the script performs a lookup against `whois.arin.net:43` (raw TCP).
 
-**Извлекаемые поля:**
+**Extracted fields:**
 
-| Поле | Описание | Пример |
+| Field | Description | Example |
 |---|---|---|
-| `NetRange` | Диапазон IP-адресов | `8.8.8.0 - 8.8.8.255` |
-| `CIDR` | CIDR-нотация | `8.8.8.0/24` |
-| `Organization` | Краткое название | `Google LLC (GOGL)` |
-| `OrgName` | Полное название | `Google LLC` |
+| `NetRange` | IP address range | `8.8.8.0 - 8.8.8.255` |
+| `CIDR` | CIDR notation | `8.8.8.0/24` |
+| `Organization` | Short name | `Google LLC (GOGL)` |
+| `OrgName` | Full name | `Google LLC` |
 
-**Вывод:**
+**Output:**
 ```
-  🎯 Удалённые хосты, к которым обращался 192.168.1.100 (MyPhone)
-     порт 443, 5 запросов с интервалом 5 сек
+  🎯 Remote hosts contacted by 192.168.1.100 (MyPhone)
+     port 443, 5 requests every 5 sec
 
-  #    IP               Порты  Встр  CIDR                     Организация
+  #    IP               Ports  Cnt  CIDR                     Organization
   ────────────────────────────────────────────────────────────────────────
-  1    142.250.185.78   443    3     142.250.0.0/15            Google LLC
-  2    157.240.1.35     443    2     157.240.0.0/16            Facebook Inc.
+  1    142.250.185.78   443    3    142.250.0.0/15            Google LLC
+  2    157.240.1.35     443    2    157.240.0.0/16            Facebook Inc.
 
-  📋 Детальная WHOIS-информация
+  📋 Detailed WHOIS info
 
   [1] 142.250.185.78
       NetRange:      142.250.0.0 - 142.250.255.255
@@ -205,164 +205,164 @@ export KEENETIC_ROUTER_PASSWORD="ваш_пароль_от_keenetic"
       OrgName:       Facebook Inc.
 ```
 
-**Таймаут:** 8 секунд на запрос. Если сервер недоступен или IP не найден — выводится соответствующее сообщение.
+**Timeout:** 8 seconds per request. If the server is unavailable or the IP is not found, a message is printed.
 
-## Сравнение подсетей Google/YouTube
+## Google/YouTube subnet comparison
 
-Автоматически запускается **после режима сбора**. Скрипт:
+Runs automatically **after the collect mode**. The script:
 
-1. Выбирает из WHOIS-данных подсети (CIDR), принадлежащие **Google** или **YouTube** (в `OrgName`/`Organization` встречается `google` или `youtube`)
-2. Запрашивает список DNS-статических маршрутов роутера
-3. Сравнивает найденные подсети со списком и выводит **отсутствующие**
+1. Picks subnets (CIDR) belonging to **Google** or **YouTube** from the WHOIS data (if `OrgName`/`Organization` contains `google` or `youtube`)
+2. Fetches the router's DNS static routes
+3. Compares the found subnets with the list and prints the **missing** ones
 
-**Эндпоинты (KeeneticOS 4.x):**
+**Endpoints (KeeneticOS 4.x):**
 
-| Эндпоинт | Что содержит |
+| Endpoint | What it contains |
 |---|---|
-| `/rci/object-group/fqdn` | Группы доменных имён: `{имя: {description, include: [{address}]}}` — здесь лежат подсети/домены |
-| `/rci/dns-proxy/route` | Сами DNS-маршруты: `[{group, interface, auto, reject, index}]` |
+| `/rci/object-group/fqdn` | FQDN groups: `{name: {description, include: [{address}]}}` — subnets/domains live here |
+| `/rci/dns-proxy/route` | The DNS routes themselves: `[{group, interface, auto, reject, index}]` |
 
-> **Примечание:** на KeeneticOS 4.x адрес `/rci/staticRoutes/dns` **не существует** (HTTP 404) — это путь раздела старого интерфейса. Реальные эндпоинты указаны выше.
+> **Note:** on KeeneticOS 4.x the `/rci/staticRoutes/dns` path **does not exist** (HTTP 404) — it's from the old UI. The real endpoints are above.
 
-Подсеть считается **уже присутствующей**, если на роутере есть она сама или более широкая подсеть, полностью её покрывающая. Доменные записи в группах в сравнении не участвуют — о них выводится уведомление.
+A subnet is considered **already present** if the router has the same subnet or a wider one that fully covers it. Domain entries in groups don't participate in the comparison — a notice about them is printed.
 
-**Пример вывода:**
+**Example output:**
 ```
-  🌐 Подсети Google/YouTube: сравнение с DNS-маршрутами роутера
-  Найдено подсетей: 5  |  Уже на роутере: 3  |  Отсутствует: 2
+  🌐 Google/YouTube subnets: comparison with router DNS routes
+  Found: 5  |  Already on router: 3  |  Missing: 2
 
-  #    Подсеть                  Организация                      Статус
+  #    Subnet                  Organization                      Status
   ────────────────────────────────────────────────────────────────────────────────
-  1    34.128.0.0/10            Google LLC                       ✗ отсутствует
-  2    64.233.160.0/19          Google LLC                       ✓ есть на роутере
-  3    74.125.0.0/16            Google LLC                       ✗ отсутствует
-  4    142.250.0.0/15           Google LLC                       ✓ есть на роутере
+  1    34.128.0.0/10            Google LLC                       ✗ missing
+  2    64.233.160.0/19          Google LLC                       ✓ on router
+  3    74.125.0.0/16            Google LLC                       ✗ missing
+  4    142.250.0.0/15           Google LLC                       ✓ on router
   ────────────────────────────────────────────────────────────────────────────────
 
-  ⚠️  Отсутствующие подсети (2) — их нет в DNS-маршрутах роутера:
+  ⚠️  Missing subnets (2) — not present in the router's DNS routes:
     • 34.128.0.0/10  (Google LLC)
     • 74.125.0.0/16  (Google LLC)
 ```
 
-**Добавление на роутер:** при старте в режиме сбора скрипт предлагает выбрать группу DNS-маршрутов, в которую будут добавляться отсутствующие подсети (Enter — последняя выбранная группа, `0` — не добавлять). Если подсети отсутствуют, скрипт **автоматически** (без подтверждения) дописывает их в выбранную группу через `POST /rci/object-group/fqdn` (существующие записи группы сохраняются, дубли отбрасываются). Последний выбор группы сохраняется в `last_choice.json`; при ошибке записи выводится сообщение и ничего не меняется.
+**Adding to the router:** at startup in collect mode the script asks to choose the DNS route group where missing subnets will be added (Enter — the last selected group, `0` — don't add). If subnets are missing, the script **automatically** (no confirmation) adds them to the selected group via `POST /rci/object-group/fqdn` (existing group entries are kept, duplicates are dropped). The last group choice is stored in `last_choice.json`; on a write error a message is printed and nothing is changed.
 
-## Запоминание последнего выбора
+## Remembering the last choice
 
-Скрипт сохраняет последний выбор — **хост, режим, порт и группу DNS-маршрутов** — в файл `last_choice.json` и предлагает его по умолчанию при следующем запуске:
+The script stores the last choice — **host, mode, port and DNS route group** — in the `last_choice.json` file and suggests it by default on the next run:
 
-- **Выбор хоста:** в промпте показывается последний хост (`Enter — MyPhone (192.168.1.100)`); **Enter** подтверждает его, **`quit`** — выход из программы
-- **Режим и порт:** Enter подставляет последние значения (`Режим [2]`, `Порт [0]`), при первом запуске — режим 1 и порт 443
-- **Группа DNS-маршрутов:** в режиме сбора Enter подставляет последнюю выбранную группу, `0` — не добавлять автоматически
+- **Host selection:** the prompt shows the last host (`Enter — MyPhone (192.168.1.100)`); **Enter** confirms it, **`quit`** exits the program
+- **Mode and port:** Enter fills in the last values (`Mode [2]`, `Port [0]`); on first run — mode 1 and port 443
+- **DNS route group:** in collect mode Enter fills in the last selected group, `0` — don't add automatically
 
-Файл `last_choice.json` создаётся автоматически в корне репозитория (рядом с `README.md`). Он содержит личные данные (IP выбранного хоста) и не отслеживается git — запись добавлена в `.gitignore`.
+The `last_choice.json` file is created automatically in the repository root (next to `README.md`). It contains personal data (the selected host's IP) and is not tracked by git — it's listed in `.gitignore`.
 
-## Переменные окружения
+## Environment variables
 
-| Переменная | Описание | Обязательная |
+| Variable | Description | Required |
 |---|---|---|
-| `KEENETIC_ROUTER_IP` | IP-адрес роутера (по умолчанию `192.168.1.1`) | Нет |
-| `KEENETIC_ROUTER_PASSWORD` | Пароль от веб-интерфейса Keenetic | Нет (будет запрошен интерактивно) |
+| `KEENETIC_ROUTER_IP` | Router IP address (default `192.168.1.1`) | No |
+| `KEENETIC_ROUTER_PASSWORD` | Keenetic web UI password | No (prompts interactively) |
 
 ```bash
-# Варианты передачи настроек:
+# Ways to pass the settings:
 export KEENETIC_ROUTER_IP="192.168.1.1"
-export KEENETIC_ROUTER_PASSWORD="мой_пароль"
+export KEENETIC_ROUTER_PASSWORD="my_password"
 ./keenetic.sh
 
-# Или одной строкой:
-KEENETIC_ROUTER_IP="192.168.1.1" KEENETIC_ROUTER_PASSWORD="мой_пароль" ./keenetic.sh
+# Or in one line:
+KEENETIC_ROUTER_IP="192.168.1.1" KEENETIC_ROUTER_PASSWORD="my_password" ./keenetic.sh
 ```
 
-## Режим отладки
+## Debug mode
 
 ```
 ./keenetic.sh --debug
 ```
 
-Включает вывод сырых JSON-ответов от всех API-эндпоинтов:
-- `/rci/show/ip/hotspot` — список хостов
-- `/rci/show/ip/connections` — активные соединения (и другие эндпоинты)
-- `/rci/object-group/fqdn` — группы доменных имён DNS-маршрутов
+Enables raw JSON output from all API endpoints:
+- `/rci/show/ip/hotspot` — host list
+- `/rci/show/ip/connections` — active connections (and other endpoints)
+- `/rci/object-group/fqdn` — FQDN groups of DNS routes
 
-## Тесты
+## Tests
 
-Тесты написаны на стандартном модуле `unittest` — внешние зависимости не нужны:
+Tests are written with the standard `unittest` module — no external dependencies:
 
 ```bash
 cd /path/to/repo
 python -m unittest discover -s tests -v
 ```
 
-Покрытие: модели данных, интерактивный выбор хоста, выбор группы DNS-маршрутов,
-сравнение подсетей и автодобавление, хранение последнего выбора, конфигурация.
+Coverage: data models, interactive host selection, DNS route group selection,
+subnet comparison and auto-add, last-choice storage, configuration.
 
-## Непрерывная интеграция
+## Continuous integration
 
-GitHub Actions (`.github/workflows/ci.yml`) запускается при каждом **push** и **pull request**:
+GitHub Actions (`.github/workflows/ci.yml`) runs on every **push** and **pull request**:
 
 - Python **3.10**
-- `python -m compileall` — проверка синтаксиса
-- `python -m unittest discover -s tests` — юнит-тесты
+- `python -m compileall` — syntax check
+- `python -m unittest discover -s tests` — unit tests
 
-## Структура проекта
+## Project structure
 
 ```
 keenetic/
-├── keenetic/             # Пакет
-│   ├── __init__.py       # Экспортирует main()
-│   ├── __main__.py       # Точка входа: python -m keenetic
-│   ├── cli.py            # Аргументы, интерактивное меню, main()
-│   ├── config.py         # Константы (ROUTER_IP, LOGIN, COLLECT_COUNT...)
+├── keenetic/             # Package
+│   ├── __init__.py       # Exports main()
+│   ├── __main__.py       # Entry point: python -m keenetic
+│   ├── cli.py            # Arguments, interactive menu, main()
+│   ├── config.py         # Constants (ROUTER_IP, LOGIN, COLLECT_COUNT...)
 │   ├── models.py         # Dataclasses: Host, Connection, RawConn, CollectedHost
-│   ├── session.py        # KeeneticSession — HTTP-клиент с cookie
-│   ├── auth.py           # Challenge-response авторизация
-│   ├── hosts.py          # Получение, вывод и выбор хостов
-│   ├── connections.py    # Получение активных соединений (multi-endpoint)
-│   ├── collector.py      # Режим сбора: 5 запросов + агрегация
-│   ├── whois.py          # WHOIS-запросы (whois.arin.net:43)
-│   ├── static_routes.py  # Сравнение подсетей Google/YouTube с DNS-маршрутами
-│   └── last_choice.py    # Последний выбор пользователя (~/.keenetic/)
-├── tests/                # Юнит-тесты (unittest, без зависимостей)
+│   ├── session.py        # KeeneticSession — cookie-aware HTTP client
+│   ├── auth.py           # Challenge-response authentication
+│   ├── hosts.py          # Fetching, displaying and selecting hosts
+│   ├── connections.py    # Fetching active connections (multi-endpoint)
+│   ├── collector.py      # Collect mode: 5 requests + aggregation
+│   ├── whois.py          # WHOIS lookups (whois.arin.net:43)
+│   ├── static_routes.py  # Google/YouTube subnet comparison with DNS routes
+│   └── last_choice.py    # User's last choice (last_choice.json)
+├── tests/                # Unit tests (unittest, no dependencies)
 │   ├── test_models.py
 │   ├── test_hosts.py
 │   ├── test_static_routes.py
 │   ├── test_last_choice.py
 │   ├── test_config.py
 │   └── test_collector.py
-├── .github/workflows/ci.yml   # CI: тесты на push и pull request
-├── pyproject.toml        # Метаданные пакета и entry point «keenetic»
-├── keenetic.sh           # Bash-лаунчер
-├── AGENTS.md             # Инструкции для AI-ассистентов
+├── .github/workflows/ci.yml   # CI: tests on push and pull request
+├── pyproject.toml        # Package metadata and the 'keenetic' entry point
+├── keenetic.sh           # Bash launcher
+├── AGENTS.md             # Guidelines for AI assistants
 ├── LICENSE               # MIT License
-├── README.md             # Этот файл
-├── last_choice.json      # Последний выбор (создаётся при запуске, в .gitignore)
+├── README.md             # This file
+├── last_choice.json      # Last choice (created on run, in .gitignore)
 └── .gitignore
 ```
 
-## Модули (API)
+## Modules (API)
 
-| Модуль | Назначение | Ключевые функции/классы |
+| Module | Purpose | Key functions/classes |
 |---|---|---|
-| `config.py` | Конфигурация | `ROUTER_IP`, `LOGIN`, `COLLECT_COUNT`, `DEBUG` (глобал) |
-| `models.py` | Модели данных | `Host`, `Connection`, `RawConn`, `CollectedHost`, `str_val()`, `parse_connection()` |
-| `session.py` | HTTP | `KeeneticSession` — GET/POST с cookie |
-| `auth.py` | Авторизация | `get_challenge()`, `compute_password_hash()`, `auth_flow()` |
-| `hosts.py` | Хосты | `get_hosts()`, `print_hosts()`, `select_host()` |
-| `connections.py` | Соединения | `get_host_connections()`, `print_connections()`, `CONNECTION_ENDPOINTS` |
-| `collector.py` | Сбор | `fetch_and_collect()`, `print_collected()` |
+| `config.py` | Configuration | `ROUTER_IP`, `LOGIN`, `COLLECT_COUNT`, `DEBUG` (global) |
+| `models.py` | Data models | `Host`, `Connection`, `RawConn`, `CollectedHost`, `str_val()`, `parse_connection()` |
+| `session.py` | HTTP | `KeeneticSession` — GET/POST with cookie |
+| `auth.py` | Authentication | `get_challenge()`, `compute_password_hash()`, `auth_flow()` |
+| `hosts.py` | Hosts | `get_hosts()`, `print_hosts()`, `select_host()` |
+| `connections.py` | Connections | `get_host_connections()`, `print_connections()`, `CONNECTION_ENDPOINTS` |
+| `collector.py` | Collection | `fetch_and_collect()`, `print_collected()` |
 | `whois.py` | WHOIS | `WhoisInfo`, `lookup(ip)` |
-| `static_routes.py` | Сравнение подсетей | `compare_google_subnets()`, `select_fqdn_group()`, `get_router_subnets()`, `OBJECT_GROUP_FQDN_ENDPOINT` |
-| `last_choice.py` | Последний выбор | `load_last_choice()`, `save_last_choice()`, `DEFAULT_MODE`, `DEFAULT_PORT` |
+| `static_routes.py` | Subnet comparison | `compare_google_subnets()`, `select_fqdn_group()`, `get_router_subnets()`, `OBJECT_GROUP_FQDN_ENDPOINT` |
+| `last_choice.py` | Last choice | `load_last_choice()`, `save_last_choice()`, `DEFAULT_MODE`, `DEFAULT_PORT` |
 | `cli.py` | CLI | `choose_mode_and_port()`, `main()` |
 
-## Требования
+## Requirements
 
 - **Python 3.10+** (type hints: `str \| None`, `list[Host]`)
-- **Только стандартная библиотека** — никаких зависимостей для запуска
-  - `urllib` — HTTP-запросы
+- **Standard library only** — no dependencies to run
+  - `urllib` — HTTP requests
   - `socket` — WHOIS (raw TCP)
-  - `hashlib` — MD5/SHA256 для авторизации
-  - `json`, `dataclasses`, `getpass`, `time` — стандартные
-- Для установки (`pip install .`) потребуется `setuptools` — он есть в любом Python
-- **Доступ к роутеру:** `http://192.168.1.1` (порт 80, по умолчанию; IP настраивается через `KEENETIC_ROUTER_IP`)
-- **Доступ к whois.arin.net:** порт 43 (только для WHOIS-обогащения)
+  - `hashlib` — MD5/SHA256 for authentication
+  - `json`, `dataclasses`, `getpass`, `time` — standard
+- For install (`pip install .`) `setuptools` is needed — it ships with every Python
+- **Router access:** `http://192.168.1.1` (port 80 by default; IP is configurable via `KEENETIC_ROUTER_IP`)
+- **whois.arin.net access:** port 43 (only for WHOIS enrichment)

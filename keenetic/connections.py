@@ -1,4 +1,4 @@
-"""Получение и отображение активных соединений из Keenetic API."""
+"""Fetching and displaying active connections from the Keenetic API."""
 
 import json
 import sys
@@ -11,7 +11,7 @@ from keenetic.models import (
 from keenetic.session import KeeneticSession
 
 
-# Эндпоинты для активных соединений (в порядке приоритета)
+# Endpoints for active connections (in priority order)
 CONNECTION_ENDPOINTS = [
     "/rci/show/ip/connections",
     "/rci/show/ip/conntrack",
@@ -22,9 +22,9 @@ CONNECTION_ENDPOINTS = [
 
 
 def try_get_connections(session: KeeneticSession, endpoint: str) -> tuple[dict, int] | None:
-    """Пробует получить соединения по endpoint'у. Возвращает (parsed, status) или None."""
+    """Tries to fetch connections from the endpoint. Returns (parsed, status) or None."""
     if config.DEBUG:
-        print(f"\n[DEBUG] Пробуем {endpoint}...")
+        print(f"\n[DEBUG] Trying {endpoint}...")
     data, status = session.get(endpoint)
     if status == 200:
         parsed = json.loads(data.decode("utf-8"))
@@ -37,14 +37,14 @@ def try_get_connections(session: KeeneticSession, endpoint: str) -> tuple[dict, 
 
 
 def get_all_endpoint_connections(session: KeeneticSession) -> list[dict] | None:
-    """Перебирает эндпоинты, пока не получит список соединений."""
+    """Iterates over endpoints until it gets a connection list."""
     for ep in CONNECTION_ENDPOINTS:
         result = try_get_connections(session, ep)
         if result is None:
             continue
         parsed, _ = result
 
-        # Keenetic может вернуть как dict с ключами, так и список напрямую
+        # Keenetic may return a dict with keys or a plain list
         raw: list | None = None
         if isinstance(parsed, list):
             raw = parsed
@@ -59,15 +59,15 @@ def get_all_endpoint_connections(session: KeeneticSession) -> list[dict] | None:
             )
 
         if raw is not None:
-            print(f"[✓] Эндпоинт: {ep}")
+            print(f"[✓] Endpoint: {ep}")
             return raw
 
-    print("[!] Ни один эндпоинт не вернул данные о соединениях.")
+    print("[!] No endpoint returned connection data.")
     return None
 
 
 def get_host_connections(session: KeeneticSession, host: Host) -> list[Connection]:
-    """Получает все соединения, в которых участвует выбранный хост."""
+    """Fetches all connections involving the selected host."""
     raw_list = get_all_endpoint_connections(session)
     if raw_list is None:
         sys.exit(1)
@@ -85,18 +85,18 @@ def get_host_connections(session: KeeneticSession, host: Host) -> list[Connectio
 
 
 # ---------------------------------------------------------------------------
-# Вывод
+# Output
 # ---------------------------------------------------------------------------
 
 def _port_filter_label(port_filter: int | None) -> str:
-    """Метка фильтра: None → «все порты»."""
-    return "все порты" if port_filter is None else f"порт {port_filter}"
+    """Filter label: None → 'all ports'."""
+    return "all ports" if port_filter is None else f"port {port_filter}"
 
 
 def print_connections(conns: list[Connection], host: Host, port_filter: int | None = 443):
-    """Выводит соединения для хоста, опционально отфильтрованные по порту."""
+    """Prints the host's connections, optionally filtered by port."""
     if not conns:
-        print(f"\n[!] Нет соединений для {host.ip} ({host.name})")
+        print(f"\n[!] No connections for {host.ip} ({host.name})")
         return
 
     if port_filter is not None:
@@ -108,18 +108,18 @@ def print_connections(conns: list[Connection], host: Host, port_filter: int | No
         filtered = conns
 
     print(f"\n{'═' * 108}")
-    print(f"  Хост: {host.ip} ({host.name}) — {host.mac}")
+    print(f"  Host: {host.ip} ({host.name}) — {host.mac}")
     if port_filter:
-        print(f"  Фильтр: порт {port_filter}")
+        print(f"  Filter: port {port_filter}")
     print(f"{'═' * 108}")
 
     if not filtered:
-        print(f"\n  [!] Нет соединений ({_port_filter_label(port_filter)}).")
+        print(f"\n  [!] No connections ({_port_filter_label(port_filter)}).")
         if port_filter is not None:
-            print(f"  Всего соединений хоста: {len(conns)} (показать все: порт 0)")
+            print(f"  Total host connections: {len(conns)} (show all: port 0)")
         return
 
-    print(f"\n  {'Протокол':<8} {'Src IP':<20} {'Порт':<8} {'':>2} {'Dst IP':<20} {'Порт':<8} {'Состояние':<14} {'RX':<10} {'TX'}")
+    print(f"\n  {'Protocol':<8} {'Src IP':<20} {'Port':<8} {'':>2} {'Dst IP':<20} {'Port':<8} {'State':<14} {'RX':<10} {'TX'}")
     print(f"  {'─' * 106}")
 
     for c in filtered:
@@ -129,4 +129,4 @@ def print_connections(conns: list[Connection], host: Host, port_filter: int | No
             print(f"  {c.protocol:<8} {c.src_ip:<20} {c.src_port:<8} ← {c.dst_ip:<20} {c.dst_port:<8} {c.state:<14} {c.bytes_in:<10} {c.bytes_out}")
 
     print(f"  {'─' * 106}")
-    print(f"  Всего: {len(filtered)} соединений ({_port_filter_label(port_filter)})")
+    print(f"  Total: {len(filtered)} connections ({_port_filter_label(port_filter)})")

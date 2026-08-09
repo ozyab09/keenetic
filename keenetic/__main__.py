@@ -1,4 +1,4 @@
-"""Точка входа для запуска пакета: python -m keenetic."""
+"""Entry point for running the package: python -m keenetic."""
 
 import sys
 
@@ -8,8 +8,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[!] Отменено пользователем.")
+        print("\n[!] Cancelled by user.")
         sys.exit(0)
     except Exception as e:
-        print(f"\n[!] Ошибка: {e}")
+        print(f"\n[!] Error: {e}")
         sys.exit(1)
