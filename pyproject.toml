@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "keenetic-api-tool"
+version = "1.0.0"
+description = "CLI-утилита для мониторинга сетевых соединений через роутер Keenetic"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Keenetic API Tool contributors" }]
+keywords = ["keenetic", "router", "ndms", "rci", "cli", "whois", "network"]
+classifiers = [
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: POSIX",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Networking :: Monitoring",
+]
+
+[project.scripts]
+keenetic = "keenetic.cli:main"
+
+[tool.setuptools]
+packages = ["keenetic"]
