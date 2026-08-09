@@ -1,16 +1,16 @@
-"""Утилита для работы с роутером Keenetic через REST API (NDMS RCI).
+"""Utility for working with a Keenetic router via REST API (NDMS RCI).
 
-Работа:
-  1. Авторизация
-  2. Выбор хоста из списка клиентов
-  3. Интерактивный выбор режима и порта
-  4. Выполнение
+Workflow:
+  1. Authentication
+  2. Select a host from the client list
+  3. Interactive mode and port selection
+  4. Run
 
-Режимы:
-  1. Сбор — 5 запросов к API с интервалом 5 сек, сбор удалённых хостов
-  2. Снимок — одноразовый показ активных соединений
+Modes:
+  1. Collect — 5 API requests every 5 s, aggregates remote hosts
+  2. Snapshot — one-shot view of active connections
 
-Зависимости: только стандартная библиотека Python.
+Dependencies: Python standard library only.
 """
 
 from keenetic.cli import main

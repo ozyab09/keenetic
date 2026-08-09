@@ -1,4 +1,4 @@
-"""Тесты сравнения подсетей и выбора группы (keenetic.static_routes)."""
+"""Tests for subnet comparison and group selection (keenetic.static_routes)."""
 
 import json
 import unittest
@@ -9,7 +9,7 @@ from keenetic.whois import WhoisInfo
 
 
 class FakeSession:
-    """Заглушка сессии: отдаёт группы, принимает запись."""
+    """Session stub: serves groups, accepts writes."""
 
     def __init__(self, groups, post_status=200, post_body=b"{}"):
         self.groups = groups
@@ -28,7 +28,7 @@ class FakeSession:
 GROUPS = {
     "domain-list16": {"description": "Youtube Personal List",
                       "include": [{"address": "142.250.0.0/15"}]},
-    "domain-list1": {"description": "Другие домены",
+    "domain-list1": {"description": "Other domains",
                      "include": [{"address": "example.com"}]},
     "domain-list2": {"description": "", "include": [{"address": "8.8.8.8"}]},
 }
@@ -89,12 +89,12 @@ class TestSelectFqdnGroup(unittest.TestCase):
                              "domain-list1")
 
     def test_enter_after_skip(self):
-        # пустая строка в last_choice означает «не добавлять» → default 0
+        # an empty string in last_choice means "don't add" → default 0
         with patch("builtins.input", return_value=""):
             self.assertIsNone(sr.select_fqdn_group(FakeSession(GROUPS), ""))
 
     def test_enter_no_last_defaults_first(self):
-        # сортировка: группы с описанием выше, затем по имени
+        # sorting: groups with a description first, then by name
         with patch("builtins.input", return_value=""):
             self.assertEqual(sr.select_fqdn_group(FakeSession(GROUPS), None),
                              "domain-list1")
@@ -133,10 +133,10 @@ class TestAddMissingSubnets(unittest.TestCase):
         s = FakeSession(GROUPS)
         sr._add_missing_subnets(s, {"34.128.0.0/10": "Google LLC"}, "domain-list1")
         payload = s.posted["domain-list1"]
-        self.assertEqual(payload["description"], "Другие домены")
+        self.assertEqual(payload["description"], "Other domains")
         addrs = [e["address"] for e in payload["include"]]
-        self.assertIn("example.com", addrs)      # старые записи сохранены
-        self.assertIn("34.128.0.0/10", addrs)    # новая добавлена
+        self.assertIn("example.com", addrs)      # old entries kept
+        self.assertIn("34.128.0.0/10", addrs)    # new one added
 
     def test_unknown_group_no_write(self):
         s = FakeSession(GROUPS)
@@ -160,7 +160,7 @@ class TestCompareGoogleSubnets(unittest.TestCase):
         }
 
     def test_with_group_adds_missing(self):
-        s = FakeSession(GROUPS)  # на роутере есть 142.250.0.0/15, нет 34.128.0.0/10
+        s = FakeSession(GROUPS)  # router has 142.250.0.0/15, missing 34.128.0.0/10
         sr.compare_google_subnets(s, self._cache(), "domain-list16")
         addrs = [e["address"] for e in s.posted["domain-list16"]["include"]]
         self.assertIn("34.128.0.0/10", addrs)

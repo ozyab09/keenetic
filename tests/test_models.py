@@ -1,4 +1,4 @@
-"""Тесты моделей данных (keenetic.models)."""
+"""Tests for the data models (keenetic.models)."""
 
 import unittest
 

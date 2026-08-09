@@ -1,4 +1,4 @@
-"""Получение, отображение и интерактивный выбор хостов из Keenetic API."""
+"""Fetching, displaying and interactively selecting hosts from the Keenetic API."""
 
 import json
 import sys
@@ -10,10 +10,10 @@ from keenetic.session import KeeneticSession
 
 
 def get_hosts(session: KeeneticSession) -> list[Host]:
-    """Получает список всех хостов через /rci/show/ip/hotspot."""
+    """Fetches the full host list via /rci/show/ip/hotspot."""
     data, status = session.get("/rci/show/ip/hotspot")
     if status != 200:
-        print(f"[!] Ошибка получения хостов: HTTP {status}")
+        print(f"[!] Error fetching hosts: HTTP {status}")
         sys.exit(1)
 
     parsed = json.loads(data.decode("utf-8"))
@@ -38,27 +38,27 @@ def get_hosts(session: KeeneticSession) -> list[Host]:
 
 
 def print_hosts(hosts: list[Host]):
-    """Выводит таблицу хостов."""
+    """Prints the host table."""
     if not hosts:
-        print("\n[!] Нет подключённых клиентов.")
+        print("\n[!] No connected clients.")
         return
 
     print(f"\n{'─' * 88}")
-    print(f"  {'#':<3} {'IP':<16} {'MAC':<18} {'Имя':<24} {'Интерфейс':<12} {'Статус'}")
+    print(f"  {'#':<3} {'IP':<16} {'MAC':<18} {'Name':<24} {'Interface':<12} {'Status'}")
     print(f"{'─' * 88}")
     for h in hosts:
         status = "● ONLINE" if h.active else "○ OFFLINE"
         print(f"  {h.index:<3} {h.ip:<16} {h.mac:<18} {h.name:<24} {h.interface:<12} {status}")
     print(f"{'─' * 88}")
-    print(f"  Всего хостов: {len(hosts)}")
+    print(f"  Total hosts: {len(hosts)}")
 
 
 def select_host(hosts: list[Host], last_ip: str | None = None) -> Host:
-    """Интерактивный выбор хоста по номеру, IP или имени.
+    """Interactive host selection by number, IP or name.
 
-    Enter — подтверждает последний выбранный хост (если он есть).
-    'quit' (или 'exit', 'q', 'выход') — выход из программы.
-    Слово 'last' работает как и Enter — выбирает последний хост.
+    Enter — confirms the last selected host (if any).
+    'quit' (or 'exit', 'q') — exits the program.
+    The word 'last' works like Enter — selects the last host.
     """
     last_host = None
     if last_ip:
@@ -68,26 +68,26 @@ def select_host(hosts: list[Host], last_ip: str | None = None) -> Host:
         try:
             if last_host is not None:
                 last_name = last_host.name or last_host.ip
-                prompt = (f"\n🔍 Выберите хост (номер / IP / имя, Enter — {last_name} "
-                          f"({last_host.ip}), 'quit' для выхода): ")
+                prompt = (f"\n🔍 Select host (number / IP / name, Enter — {last_name} "
+                          f"({last_host.ip}), 'quit' to exit): ")
             else:
-                prompt = "\n🔍 Выберите хост (номер / IP / имя, Enter или 'quit' для выхода): "
+                prompt = "\n🔍 Select host (number / IP / name, Enter or 'quit' to exit): "
             raw = input(prompt).strip()
             if not raw:
                 if last_host is not None:
-                    return last_host  # Enter — подтвердить последний хост
-                print("Выход.")
+                    return last_host  # Enter — confirm the last host
+                print("Exiting.")
                 sys.exit(0)
 
-            if raw.lower() in ("quit", "exit", "q", "выход"):
-                print("Выход.")
+            if raw.lower() in ("quit", "exit", "q"):
+                print("Exiting.")
                 sys.exit(0)
 
-            # Быстрый выбор последнего хоста (то же, что Enter)
+            # Quick selection of the last host (same as Enter)
             if last_host is not None and raw.lower() == "last":
                 return last_host
 
-            # Попытка по номеру
+            # Try by number
             try:
                 idx = int(raw)
                 if 1 <= idx <= len(hosts):
@@ -95,7 +95,7 @@ def select_host(hosts: list[Host], last_ip: str | None = None) -> Host:
             except ValueError:
                 pass
 
-            # Поиск по IP или имени (частичное совпадение)
+            # Search by IP or name (partial match)
             raw_lower = raw.lower()
             matches = [
                 h for h in hosts
@@ -106,12 +106,12 @@ def select_host(hosts: list[Host], last_ip: str | None = None) -> Host:
             if len(matches) == 1:
                 return matches[0]
             elif len(matches) > 1:
-                print(f"  Найдено несколько совпадений:")
+                print("  Multiple matches found:")
                 for m in matches:
                     print(f"    {m.index:>3}. {m.ip:<16} {m.mac:<18} {m.name:<24}")
                 continue
             else:
-                print(f"  [!] Ничего не найдено по запросу '{raw}'")
+                print(f"  [!] Nothing found for '{raw}'")
         except KeyboardInterrupt:
-            print("\nВыход.")
+            print("\nExiting.")
             sys.exit(0)

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "keenetic-api-tool"
 version = "1.0.0"
-description = "CLI-утилита для мониторинга сетевых соединений через роутер Keenetic"
+description = "CLI utility for monitoring network connections through a Keenetic router"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

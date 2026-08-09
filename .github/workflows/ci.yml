@@ -1,26 +1,26 @@
 name: CI
 
-# Запускается при push в любую ветку и при создании pull request (MR)
+# Runs on any push and on pull request creation
 on:
   push:
   pull_request:
 
 jobs:
   test:
-    name: Тесты
+    name: Tests
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
-      - name: Установка Python 3.10
-        uses: actions/setup-python@v5
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v7
         with:
           python-version: "3.10"
 
-      - name: Проверка синтаксиса
+      - name: Syntax check
         run: python -m compileall -q keenetic tests
 
-      - name: Юнит-тесты
+      - name: Unit tests
         run: python -m unittest discover -s tests -v

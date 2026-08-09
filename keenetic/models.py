@@ -1,11 +1,11 @@
-"""Модели данных и вспомогательные функции для работы с Keenetic API."""
+"""Data models and helpers for working with the Keenetic API."""
 
 from dataclasses import dataclass, field
 
 
 @dataclass
 class Host:
-    """Локальный хост (клиент роутера)."""
+    """Local host (a router client)."""
     index: int
     ip: str
     mac: str
@@ -16,7 +16,7 @@ class Host:
 
 @dataclass
 class Connection:
-    """Активное соединение (отображаемое)."""
+    """Active connection (displayed)."""
     src_ip: str
     src_port: str
     dst_ip: str
@@ -29,7 +29,7 @@ class Connection:
 
 @dataclass
 class RawConn:
-    """Сырая запись соединения из API, сохраняет все IP-поля для фильтрации."""
+    """Raw connection record from the API; keeps all IP fields for filtering."""
     src_ip: str
     x_src_ip: str
     dst_ip: str
@@ -44,7 +44,7 @@ class RawConn:
 
 @dataclass
 class CollectedHost:
-    """Удалённый хост, к которому обращался локальный хост (режим сбора)."""
+    """Remote host contacted by the local host (collect mode)."""
     ip: str
     ports: set[str] = field(default_factory=set)
     count: int = 0
@@ -53,11 +53,11 @@ class CollectedHost:
 
 
 # ---------------------------------------------------------------------------
-# Утилиты
+# Utilities
 # ---------------------------------------------------------------------------
 
 def str_val(value) -> str:
-    """Извлекает строку из значения (строка, dict с 'address'/'name', None, bool, число)."""
+    """Extracts a string from a value (string, dict with 'address'/'name', None, bool, number)."""
     if value is None:
         return "-"
     if isinstance(value, bool):
@@ -70,7 +70,7 @@ def str_val(value) -> str:
 
 
 def _pick(entry: dict, *keys: str) -> str:
-    """Берёт первое не-None значение из списка ключей словаря."""
+    """Returns the first non-None value among the dict keys."""
     for k in keys:
         v = entry.get(k)
         if v is not None:
@@ -79,9 +79,9 @@ def _pick(entry: dict, *keys: str) -> str:
 
 
 def parse_connection(c: dict) -> RawConn | None:
-    """Парсит один элемент соединения из разных форматов Keenetic.
+    """Parses one connection entry from the different Keenetic formats.
 
-    Keenetic может возвращать поля в разных вариантах:
+    Keenetic may return fields in different variants:
       - {src: {address:...}, dst: {address:...}, sport, dport, ...}
       - {src_ip: "...", dst_ip: "...", src_port, dst_port, ...}
       - NAT: {src, dst, sport, dport, src-out, dst-out, bytes, bytes-out}
@@ -100,13 +100,13 @@ def parse_connection(c: dict) -> RawConn | None:
     )
 
     if raw.src_ip == "-" and raw.dst_ip == "-" and raw.x_src_ip == "-" and raw.x_dst_ip == "-":
-        return None  # пустая запись
+        return None  # empty record
 
     return raw
 
 
 def ips_for_host(raw: RawConn) -> set[str]:
-    """Собирает все IP-адреса из записи (обычные + NAT)."""
+    """Collects all IP addresses from a record (regular + NAT)."""
     ips = {raw.src_ip, raw.dst_ip}
     if raw.x_src_ip != "-":
         ips.add(raw.x_src_ip)
@@ -117,14 +117,14 @@ def ips_for_host(raw: RawConn) -> set[str]:
 
 
 def to_connection(raw: RawConn, host_ip: str) -> Connection:
-    """Преобразует RawConn в Connection, выбирая IP-пару, где присутствует host_ip.
+    """Converts RawConn into Connection, picking the IP pair that contains host_ip.
 
-    Если host_ip совпадает с src_ip — это исходящее соединение, src_ip = host_ip.
-    Если host_ip совпадает с x_src_ip — NAT-трансляция, src_ip = x_src_ip.
-    Аналогично для dst/x_dst (входящие соединения).
+    If host_ip matches src_ip it is an outbound connection, so src_ip = host_ip.
+    If host_ip matches x_src_ip it is a NAT translation, so src_ip = x_src_ip.
+    Likewise for dst/x_dst (inbound connections).
     """
     def _pick_ip(primary: str, secondary: str, target: str) -> str:
-        """Выбирает IP: сначала совпадающий с target, иначе primary → secondary."""
+        """Picks an IP: first the one matching target, otherwise primary → secondary."""
         if target == primary:
             return primary
         if target == secondary:

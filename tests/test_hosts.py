@@ -1,4 +1,4 @@
-"""Тесты интерактивного выбора хоста (keenetic.hosts.select_host)."""
+"""Tests for the interactive host selection (keenetic.hosts.select_host)."""
 
 import unittest
 from unittest.mock import patch
@@ -22,7 +22,7 @@ class TestSelectHost(unittest.TestCase):
         self.assertEqual(host.ip, "10.0.0.10")
 
     def test_quit_exits(self):
-        for word in ("quit", "exit", "q", "выход"):
+        for word in ("quit", "exit", "q"):
             with patch("builtins.input", return_value=word):
                 with self.assertRaises(SystemExit):
                     select_host(HOSTS, last_ip="10.0.0.10")

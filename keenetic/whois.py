@@ -1,10 +1,10 @@
-"""WHOIS-запросы через raw TCP-сокеты (только stdlib).
+"""WHOIS lookups over raw TCP sockets (stdlib only).
 
-Поля, которые извлекаем из ответа whois.arin.net:
-  - NetRange:   диапазон IP-адресов
-  - CIDR:       CIDR-нотация
-  - Organization: краткое название организации
-  - OrgName:    полное название организации
+Fields extracted from the whois.arin.net response:
+  - NetRange:      IP address range
+  - CIDR:          CIDR notation
+  - Organization:  short organization name
+  - OrgName:       full organization name
 """
 
 import dataclasses
@@ -12,12 +12,12 @@ import socket
 
 WHOIS_SERVER = "whois.arin.net"
 WHOIS_PORT = 43
-TIMEOUT = 8  # секунд на запрос
+TIMEOUT = 8  # seconds per request
 
 
 @dataclasses.dataclass
 class WhoisInfo:
-    """Результат WHOIS-запроса."""
+    """Result of a WHOIS lookup."""
     ip: str
     net_range: str = ""
     cidr: str = ""
@@ -27,7 +27,7 @@ class WhoisInfo:
 
 
 def lookup(ip: str) -> WhoisInfo:
-    """Выполняет WHOIS-запрос для указанного IP и возвращает структурированный результат."""
+    """Performs a WHOIS lookup for the given IP and returns structured info."""
     info = WhoisInfo(ip=ip)
 
     try:

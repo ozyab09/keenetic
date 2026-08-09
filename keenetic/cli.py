@@ -1,4 +1,4 @@
-"""Главный модуль: аргументы, интерактивное меню, точка входа main()."""
+"""Main module: arguments, interactive menu, main() entry point."""
 
 import os
 import sys
@@ -22,10 +22,10 @@ from keenetic.static_routes import compare_google_subnets, select_fqdn_group
 
 def choose_mode_and_port(mode_default: str = DEFAULT_MODE,
                          port_default: int = DEFAULT_PORT) -> tuple[str, int]:
-    """Интерактивный выбор режима и порта.
+    """Interactive mode and port selection.
 
-    По умолчанию (Enter) предлагается последний выбор пользователя,
-    а если его нет — стандартные значения (режим сбора, порт 443).
+    By default (Enter) the user's last choice is suggested, or standard
+    values (collect mode, port 443) if there is none.
     """
     if mode_default not in ("collect", "once"):
         mode_default = DEFAULT_MODE
@@ -35,14 +35,14 @@ def choose_mode_and_port(mode_default: str = DEFAULT_MODE,
     default_mode_label = "2" if mode_default == "once" else "1"
 
     print(f"\n{'─' * 50}")
-    print("  Выберите режим:")
-    print(f"    1. Сбор удалённых хостов (5 запросов, интервал {config.fmt_interval(config.COLLECT_INTERVAL)})")
-    print("    2. Одноразовый снимок соединений")
+    print("  Select mode:")
+    print(f"    1. Collect remote hosts ({config.COLLECT_COUNT} requests, interval {config.fmt_interval(config.COLLECT_INTERVAL)})")
+    print("    2. One-shot connection snapshot")
     print(f"{'─' * 50}")
 
     while True:
         try:
-            raw = input(f"  Режим [{default_mode_label}]: ").strip()
+            raw = input(f"  Mode [{default_mode_label}]: ").strip()
             if raw == "":
                 mode = mode_default
                 break
@@ -53,32 +53,32 @@ def choose_mode_and_port(mode_default: str = DEFAULT_MODE,
                 mode = "once"
                 break
             else:
-                print("  [!] Введите 1 или 2")
+                print("  [!] Enter 1 or 2")
         except KeyboardInterrupt:
-            print("\nВыход.")
+            print("\nExiting.")
             sys.exit(0)
 
     while True:
         try:
-            raw = input(f"  Порт для фильтрации [{port_default}] (0 — все порты): ").strip()
+            raw = input(f"  Filter port [{port_default}] (0 — all ports): ").strip()
             if raw == "":
                 port = port_default
                 break
             port = int(raw)
             if port == 0 or 1 <= port <= 65535:
                 break
-            print("  [!] Порт должен быть от 1 до 65535 (0 — показать все)")
+            print("  [!] Port must be between 1 and 65535 (0 — show all)")
         except ValueError:
-            print("  [!] Введите число")
+            print("  [!] Enter a number")
         except KeyboardInterrupt:
-            print("\nВыход.")
+            print("\nExiting.")
             sys.exit(0)
 
     return mode, port
 
 
 def main():
-    # ─── Аргументы ──────────────────────────────────────────────
+    # ─── Arguments ─────────────────────────────────────────────
     for a in sys.argv[1:]:
         if a in ("--debug", "-d"):
             config.DEBUG = True
@@ -86,45 +86,45 @@ def main():
             print(__doc__)
             sys.exit(0)
         else:
-            print(f"[!] Неизвестный аргумент: {a}\n")
+            print(f"[!] Unknown argument: {a}\n")
             print(__doc__)
             sys.exit(1)
 
-    # ─── Пароль ─────────────────────────────────────────────────
+    # ─── Password ──────────────────────────────────────────────
     password = os.environ.get("KEENETIC_ROUTER_PASSWORD")
     if password:
-        print("[*] Пароль из KEENETIC_ROUTER_PASSWORD")
+        print("[*] Password from KEENETIC_ROUTER_PASSWORD")
     else:
-        password = getpass(f"🔑 Пароль для {config.LOGIN}@{config.ROUTER_IP}: ")
+        password = getpass(f"🔑 Password for {config.LOGIN}@{config.ROUTER_IP}: ")
 
     session = KeeneticSession()
-    print(f"\n[*] Подключение к {config.BASE_URL}...")
+    print(f"\n[*] Connecting to {config.BASE_URL}...")
 
-    # ─── Авторизация ────────────────────────────────────────────
+    # ─── Authentication ────────────────────────────────────────
     auth_flow(session, password)
 
-    # ─── Список хостов ──────────────────────────────────────────
-    print("[*] Запрашиваем список хостов...")
+    # ─── Host list ─────────────────────────────────────────────
+    print("[*] Fetching host list...")
     hosts = get_hosts(session)
     print_hosts(hosts)
 
-    # ─── Последний выбор пользователя ───────────────────────────
+    # ─── User's last choice ────────────────────────────────────
     last = load_last_choice()
     last_host_value = last.get("host")
     last_ip = last_host_value if isinstance(last_host_value, str) else None
 
-    # ─── Выбор хоста ────────────────────────────────────────────
+    # ─── Host selection ────────────────────────────────────────
     host = select_host(hosts, last_ip=last_ip)
-    print(f"\n[✓] Выбран хост: {host.ip} ({host.name})")
+    print(f"\n[✓] Selected host: {host.ip} ({host.name})")
 
-    # ─── Выбор режима и порта ───────────────────────────────────
+    # ─── Mode and port selection ───────────────────────────────
     mode, port = choose_mode_and_port(
         mode_default=last.get("mode", DEFAULT_MODE),
         port_default=last.get("port", DEFAULT_PORT),
     )
 
-    # ─── Группа DNS-маршрутов для автодобавления подсетей ────────
-    # Предлагается при старте в режиме сбора (Enter — последняя группа).
+    # ─── DNS route group for auto-adding subnets ───────────────
+    # Suggested at startup in collect mode (Enter — last group).
     group_name = None
     if mode == "collect":
         last_group = last.get("group")
@@ -134,19 +134,19 @@ def main():
     save_last_choice(host.ip, mode, port, group_name)
 
     if mode == "once":
-        # ─── Снимок ─────────────────────────────────────────────
-        print(f"\n[*] Одноразовый снимок (порт {port})...")
+        # ─── Snapshot ──────────────────────────────────────────
+        print(f"\n[*] One-shot snapshot (port {port})...")
         conns = get_host_connections(session, host)
         print_connections(conns, host, port_filter=port if port else None)
     else:
-        # ─── Сбор ───────────────────────────────────────────────
+        # ─── Collect ───────────────────────────────────────────
         total_sec = config.COLLECT_INTERVAL * (config.COLLECT_COUNT - 1)
         print(f"\n{'═' * 60}")
-        print(f"  📡 СБОР УДАЛЁННЫХ ХОСТОВ")
-        print(f"  Локальный хост: {host.ip} ({host.name})")
+        print("  📡 COLLECT REMOTE HOSTS")
+        print(f"  Local host: {host.ip} ({host.name})")
         port_str = port_label(port) if port == 0 else str(port)
-        print(f"  Порт: {port_str}  |  Запросов: {config.COLLECT_COUNT}  |  Интервал: {config.fmt_interval(config.COLLECT_INTERVAL)}")
-        print(f"  Общая длительность: ~{config.fmt_interval(total_sec)}")
+        print(f"  Port: {port_str}  |  Requests: {config.COLLECT_COUNT}  |  Interval: {config.fmt_interval(config.COLLECT_INTERVAL)}")
+        print(f"  Total duration: ~{config.fmt_interval(total_sec)}")
         print(f"{'═' * 60}")
 
         collected: dict[str, CollectedHost] = {}
@@ -154,10 +154,10 @@ def main():
         for i in range(1, config.COLLECT_COUNT + 1):
             if i > 1:
                 now_str = time.strftime("%H:%M:%S")
-                print(f"  ⏳ Ожидание {config.fmt_interval(config.COLLECT_INTERVAL)} до запроса {i}...  (текущее время: {now_str})", flush=True)
+                print(f"  ⏳ Waiting {config.fmt_interval(config.COLLECT_INTERVAL)} until request {i}...  (current time: {now_str})", flush=True)
                 time.sleep(config.COLLECT_INTERVAL)
             fetch_and_collect(session, host, collected, i, config.COLLECT_COUNT, port)
-            print(f"  ✅ Запрос {i} выполнен", flush=True)
+            print(f"  ✅ Request {i} done", flush=True)
 
         whois_cache = print_collected(collected, host, port)
         compare_google_subnets(session, whois_cache, group_name)
@@ -167,8 +167,8 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        print("\n[!] Отменено пользователем.")
+        print("\n[!] Cancelled by user.")
         sys.exit(0)
     except Exception as e:
-        print(f"\n[!] Ошибка: {e}")
+        print(f"\n[!] Error: {e}")
         sys.exit(1)
