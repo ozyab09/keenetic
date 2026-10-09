@@ -16,6 +16,7 @@ It fetches the active connections of a selected host, collects remote IP address
 - [Modes](#modes)
   - [Collect mode](#1-collect-mode)  
   - [Snapshot mode](#2-snapshot-mode)
+  - [DNS route audit](#3-dns-route-audit)
 - [WHOIS enrichment](#whois-enrichment)
 - [Google/YouTube subnet comparison](#googleyoutube-subnet-comparison)
 - [Remembering the last choice](#remembering-the-last-choice)
@@ -110,6 +111,7 @@ After authentication a host selection appears, then the menu:
   Select mode:
     1. Collect remote hosts (5 requests, interval 5 sec)
     2. One-shot connection snapshot
+    3. DNS route audit (duplicate/overlapping subnets)
 ──────────────────────────────────────────────────
   Mode [1]:                    ← Enter = last choice (or 1)
   Filter port [443] (0 — all ports):   ← Enter = last port
@@ -165,6 +167,51 @@ Shows a table:
   Protocol  Src IP               Port        Dst IP               Port     State        RX         TX
   ────────────────────────────────────────────────────────────────────────────────────────────────────
   tcp       192.168.1.100        54321    →  142.250.185.78       443      established  1024       2048
+```
+
+### 3. DNS route audit
+
+Scans all FQDN route groups on the router (`/rci/object-group/fqdn`) for duplicate and overlapping subnets. The host and port prompts stay the same, but the port filter is ignored in this mode.
+
+The audit detects four kinds of problems:
+
+| Problem | Example | Fixable |
+|---|---|---|
+| **Exact duplicates** — the same subnet in several entries | `8.8.8.8` and `8.8.8.8/32` in one group | ✅ removed within a group (variant 1); across groups — reported only |
+| **Covered subnets** — a subnet fully inside a wider one **in the same group** | `8.8.8.0/24` inside `8.8.0.0/16` | ✅ removed (variant 2) |
+| **Cross-group coverage** — one group's subnet covers another group's | `8.8.8.0/24` in group B inside `8.8.0.0/16` in group A | ❌ reported only — may be intentional (different interfaces) |
+| **Misaligned entries** — subnets not in canonical form | `10.0.0.128/24` (canonical: `10.0.0.0/24`) | ✅ rewritten in canonical form (variant 3) — the router already treats them as the canonical network, so only the stored form changes |
+
+After the report the script offers fix variants (the write to the router happens only after an explicit `y` confirmation):
+
+```
+  How to fix?
+    1. Remove exact duplicate subnets (within each group)
+    2. Variant 1 + remove subnets fully covered by a wider one in the same group
+    3. Variant 2 + rewrite misaligned entries in canonical form
+    0. Leave as is (report only)
+```
+
+> **How the fix is applied:** the changes are sent as **CLI commands** through the `/rci/` parse endpoint (`no object-group fqdn <group> include <address>` removes an entry, `object-group fqdn <group> include <address>` adds one), followed by `system configuration save`. A plain `POST /rci/object-group/fqdn` can only **add** entries to a group — it cannot remove them, so it is not used for fixes.
+
+**Example output:**
+```
+  ════════════════════════════════════════════════════════════════════════════════════════════════════════
+  🔍 DNS route audit: duplicate and overlapping subnets
+  Groups: 2  |  Subnets: 5  |  Domains: 1
+  ════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+  ⚠️  Exact duplicates (1) — the same subnet in several entries:
+    • 8.8.8.8/32               'group1' (8.8.8.8), 'group1' (8.8.8.8/32)
+
+  ⚠️  Covered subnets (1) — fully inside a wider subnet of the same group:
+    • 8.8.8.8/32               ⊂ 8.8.0.0/16                group 'group1'
+
+  ⚠️  Cross-group coverage (2) — one group's subnet covers another group's:
+    • 8.8.8.0/24               in 'group2'  ⊂  8.8.0.0/16               in 'group1'
+
+  [i] Misaligned entries (1) — not in canonical form:
+    • 10.0.0.128/24            → 10.0.0.0/24               group 'group2'
 ```
 
 ## WHOIS enrichment
@@ -294,7 +341,8 @@ python -m unittest discover -s tests -v
 ```
 
 Coverage: data models, interactive host selection, DNS route group selection,
-subnet comparison and auto-add, last-choice storage, configuration.
+subnet comparison and auto-add, DNS route audit (conflict detection and fix variants),
+last-choice storage, configuration.
 
 ## Continuous integration
 
@@ -351,7 +399,7 @@ keenetic/
 | `connections.py` | Connections | `get_host_connections()`, `print_connections()`, `CONNECTION_ENDPOINTS` |
 | `collector.py` | Collection | `fetch_and_collect()`, `print_collected()` |
 | `whois.py` | WHOIS | `WhoisInfo`, `lookup(ip)` |
-| `static_routes.py` | Subnet comparison | `compare_google_subnets()`, `select_fqdn_group()`, `get_router_subnets()`, `OBJECT_GROUP_FQDN_ENDPOINT` |
+| `static_routes.py` | Subnet comparison | `compare_google_subnets()`, `run_subnet_audit()`, `select_fqdn_group()`, `get_router_subnets()`, `OBJECT_GROUP_FQDN_ENDPOINT` |
 | `last_choice.py` | Last choice | `load_last_choice()`, `save_last_choice()`, `DEFAULT_MODE`, `DEFAULT_PORT` |
 | `cli.py` | CLI | `choose_mode_and_port()`, `main()` |
 

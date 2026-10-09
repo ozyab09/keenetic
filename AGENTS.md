@@ -72,6 +72,8 @@ keenetic/                  ← repository root
 - Use `models.str_val()` for safe value extraction
 - NAT records contain `x_src_ip` / `x_dst_ip` fields — check them when filtering
 - Authentication: challenge-response (MD5 + SHA256), described in `keenetic/auth.py`
+- DNS route fixes are sent as **CLI commands** via `KeeneticSession.post_parse()` (`POST /rci/` with `[{"parse": "<cli>"}]`) followed by `system configuration save` —
+  `POST /rci/object-group/fqdn` can only **add** group entries, it cannot remove them
 
 ### Testing
 - Unit tests: `python -m unittest discover -s tests -v` (from the repository root)
@@ -83,6 +85,10 @@ keenetic/                  ← repository root
 
 ### Adding a new connection endpoint
 Extend the `CONNECTION_ENDPOINTS` list in `keenetic/connections.py`.
+
+### Adding a new audit check
+Extend `find_subnet_conflicts()` in `keenetic/static_routes.py` (new key in the returned dict),
+print it in `run_subnet_audit()`, cover with tests in `tests/test_static_routes.py`.
 
 ### Adding a new output field
 - If the field comes from the API: add a key to `_pick()` in `models.parse_connection()`

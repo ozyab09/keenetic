@@ -17,7 +17,9 @@ from keenetic.last_choice import (
 )
 from keenetic.models import CollectedHost
 from keenetic.session import KeeneticSession
-from keenetic.static_routes import compare_google_subnets, select_fqdn_group
+from keenetic.static_routes import (
+    compare_google_subnets, run_subnet_audit, select_fqdn_group,
+)
 
 
 def choose_mode_and_port(mode_default: str = DEFAULT_MODE,
@@ -27,17 +29,18 @@ def choose_mode_and_port(mode_default: str = DEFAULT_MODE,
     By default (Enter) the user's last choice is suggested, or standard
     values (collect mode, port 443) if there is none.
     """
-    if mode_default not in ("collect", "once"):
+    if mode_default not in ("collect", "once", "audit"):
         mode_default = DEFAULT_MODE
     if not isinstance(port_default, int) or not (port_default == 0 or 1 <= port_default <= 65535):
         port_default = DEFAULT_PORT
 
-    default_mode_label = "2" if mode_default == "once" else "1"
+    default_mode_label = {"once": "2", "audit": "3"}.get(mode_default, "1")
 
     print(f"\n{'─' * 50}")
     print("  Select mode:")
     print(f"    1. Collect remote hosts ({config.COLLECT_COUNT} requests, interval {config.fmt_interval(config.COLLECT_INTERVAL)})")
     print("    2. One-shot connection snapshot")
+    print("    3. DNS route audit (duplicate/overlapping subnets)")
     print(f"{'─' * 50}")
 
     while True:
@@ -52,11 +55,18 @@ def choose_mode_and_port(mode_default: str = DEFAULT_MODE,
             elif raw == "2":
                 mode = "once"
                 break
+            elif raw == "3":
+                mode = "audit"
+                break
             else:
-                print("  [!] Enter 1 or 2")
+                print("  [!] Enter 1, 2 or 3")
         except KeyboardInterrupt:
             print("\nExiting.")
             sys.exit(0)
+
+    if mode == "audit":
+        # The port filter is not used in the audit — keep the last value
+        return mode, port_default
 
     while True:
         try:
@@ -138,6 +148,9 @@ def main():
         print(f"\n[*] One-shot snapshot (port {port})...")
         conns = get_host_connections(session, host)
         print_connections(conns, host, port_filter=port if port else None)
+    elif mode == "audit":
+        # ─── DNS route audit ───────────────────────────────────
+        run_subnet_audit(session)
     else:
         # ─── Collect ───────────────────────────────────────────
         total_sec = config.COLLECT_INTERVAL * (config.COLLECT_COUNT - 1)
