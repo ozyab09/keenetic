@@ -55,3 +55,12 @@ class KeeneticSession:
     def post_json(self, path: str, payload: dict):
         body = json.dumps(payload).encode("utf-8")
         return self.request("POST", path, body=body)
+
+    def post_parse(self, commands: list[str]):
+        """Executes CLI commands on the router via the /rci/ parse endpoint.
+
+        POSTs a JSON array of {"parse": "<cli command>"} objects — the same
+        mechanism the KeeneticOS web UI uses for the command-line interface.
+        """
+        body = json.dumps([{"parse": c} for c in commands]).encode("utf-8")
+        return self.request("POST", "/rci/", body=body)

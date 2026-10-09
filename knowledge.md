@@ -3,7 +3,7 @@
 This file gives Freebuff context about your project: goals, commands, conventions, and gotchas.
 
 ## What this is
-CLI tool that monitors network connections through a Keenetic router. It authenticates to the router (challenge-response), lists hosts, fetches active connections of a chosen host, aggregates remote IPs, and enriches them with WHOIS data (whois.arin.net:43).
+CLI tool that monitors network connections through a Keenetic router. It authenticates to the router (challenge-response), lists hosts, fetches active connections of a chosen host, aggregates remote IPs, and enriches them with WHOIS data (whois.arin.net:43). Three modes: collect (5 requests), one-shot snapshot, and DNS route audit (finds/fixes duplicate and overlapping subnets in FQDN groups).
 
 The repo root is the project root; the Python package lives in `keenetic/keenetic/`, tests in `tests/`, packaging in `pyproject.toml` (entry point `keenetic = keenetic.cli:main`).
 
@@ -18,12 +18,12 @@ The repo root is the project root; the Python package lives in `keenetic/keeneti
 ## Architecture
 - `keenetic/config.py` — constants (`ROUTER_IP` from env `KEENETIC_ROUTER_IP`, default `192.168.1.1`; `LOGIN=admin`, `COLLECT_COUNT=5`, `DEBUG` global)
 - `auth.py` — challenge-response auth: `MD5(login:realm:password)` then `SHA256(challenge + hash)`; POST `/auth`, gets session cookie
-- `session.py` — `KeeneticSession` HTTP client (urllib, cookie-aware)
+- `session.py` — `KeeneticSession` HTTP client (urllib, cookie-aware); `post_parse(commands)` POSTs `[{"parse": "<cli>"}]` to `/rci/` to run CLI commands on the router (the same mechanism as the web UI console)
 - `hosts.py` — fetch/list/select hosts from `/rci/show/ip/hotspot`
 - `connections.py` — `get_host_connections()` tries `CONNECTION_ENDPOINTS` (e.g. `/rci/show/ip/connections`, `/rci/show/ip/nat`); `print_connections()`
 - `collector.py` — collect mode: N requests every 5s, aggregate unique dst IPs + ports; `port == 0` means "no port filter" (all ports)
 - `whois.py` — `WhoisInfo` dataclass + `lookup(ip)` over raw TCP socket to whois.arin.net:43, 8s timeout
-- `static_routes.py` — compares Google/YouTube subnets from WHOIS against the router's DNS routes; runs after collect mode. The group for auto-add is chosen by the user at startup (`select_fqdn_group`, Enter — last one, `0` — don't add); missing subnets are auto-added via `POST /rci/object-group/fqdn` (no confirmation) (payload: `{group_name: {description, include: [{address}]}}`, the write replaces include entirely — merge with current entries when adding)
+- `static_routes.py` — compares Google/YouTube subnets from WHOIS against the router's DNS routes; runs after collect mode. The group for auto-add is chosen by the user at startup (`select_fqdn_group`, Enter — last one, `0` — don't add); missing subnets are auto-added via `POST /rci/object-group/fqdn` (no confirmation) (payload: `{group_name: {description, include: [{address}]}}`, the write replaces include entirely — merge with current entries when adding). Also hosts the standalone audit mode (menu item 3): `run_subnet_audit()` → `find_subnet_conflicts()` detects exact duplicates, subnets covered by a wider one in the same group, cross-group coverage and misaligned (non-canonical) entries; three fix variants are offered (dedupe → also remove covered → also canonicalize), applied only after explicit `y` confirmation via CLI commands through `session.post_parse()` (`no object-group fqdn <g> include <a>` to remove, then `system configuration save`) — a plain POST to `/rci/object-group/fqdn` can only ADD entries, never remove them; `0.0.0.0/0` and `0.0.0.0/32` service values are ignored, domains are not subnets
 - `last_choice.py` — user's last choice (host/mode/port/group) in `last_choice.json` (JSON in the repo root, path computed one level up from the `keenetic/` package); Enter in prompts takes the last value; in host selection Enter confirms the last host, `quit`/`exit`/`q` — exit (the word `last` also works like Enter); the group is saved only in `collect` mode, an empty string = explicitly declined auto-add; the file is in .gitignore (personal data)
 
 **DNS static routes (KeeneticOS 4.x, real endpoints, discovered from the web UI JS bundle):**
@@ -33,7 +33,7 @@ The repo root is the project root; the Python package lives in `keenetic/keeneti
 - `models.py` — dataclasses (`Host`, `Connection`, `RawConn`, `CollectedHost`) + `str_val()`, `parse_connection()`
 - Entry points: `__main__.py` (`python -m keenetic`), `pyproject.toml` script (`keenetic` after `pip install .`), `keenetic.sh` (bash launcher)
 
-Data flow: auth → host list → user selects host → mode (collect 5×5s | snapshot) → filter by port (default 443, 0 = all) → WHOIS enrichment → tables.
+Data flow: auth → host list → user selects host → mode (collect 5×5s | snapshot | audit) → filter by port (default 443, 0 = all; skipped in audit mode) → WHOIS enrichment → tables. Mode `audit` is stored in `last_choice.json` like the others.
 
 ## Conventions
 - **Language: English** — code comments, docstrings, AGENTS.md and README.md are in English
